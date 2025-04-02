@@ -6,7 +6,7 @@ const db = require('../db/connection');
 router.post('/', async (req, res) => {
     const { email, password, type } = req.body;
     try {
-        await db.execute(
+        await db.query(
             "INSERT INTO Users (email, password, type) VALUES (?, ?, ?)", 
             [email, password, type]
         );
@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
 // Get All Users
 router.get('/', async (req, res) => {
     try {
-        const [users] = await db.execute("SELECT * FROM Users");
+        const [users] = await db.query("SELECT * FROM Users");
         res.status(200).json(users);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
 // Get User by ID
 router.get('/:id', async (req, res) => {
     try {
-        const [user] = await db.execute("SELECT * FROM Users WHERE id = ?", [req.params.id]);
+        const [user] = await db.query("SELECT * FROM Users WHERE id = ?", [req.params.id]);
         res.status(200).json(user[0] || {});
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -40,7 +40,7 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const { email, password, type } = req.body;
     try {
-        await db.execute(
+        await db.query(
             "UPDATE Users SET email = ?, password = ?, type = ? WHERE id = ?", 
             [email, password, type, req.params.id]
         );

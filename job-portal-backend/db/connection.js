@@ -11,4 +11,15 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
+// Using callback style for connection test
+pool.getConnection((err, connection) => {
+    if (err) {
+        console.error("Database connection error:", err.message);
+        return;
+    }
+    console.log("Database connected successfully!");
+    connection.release();
+});
+
+
 module.exports = pool.promise();
