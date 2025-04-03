@@ -1,8 +1,6 @@
--- Create Database
 CREATE DATABASE IF NOT EXISTS job_portal;
 USE job_portal;
 
--- 1. Users Table
 CREATE TABLE Users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -10,7 +8,6 @@ CREATE TABLE Users (
     type ENUM('recruiter', 'applicant') NOT NULL
 );
 
--- 2. Recruiters Table
 CREATE TABLE Recruiters (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -20,7 +17,7 @@ CREATE TABLE Recruiters (
     FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
 );
 
--- 3. JobApplicants Table
+
 CREATE TABLE JobApplicants (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -32,7 +29,6 @@ CREATE TABLE JobApplicants (
     FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
 );
 
--- 4. Education Table
 CREATE TABLE Education (
     id INT AUTO_INCREMENT PRIMARY KEY,
     applicant_id INT NOT NULL,
@@ -42,7 +38,6 @@ CREATE TABLE Education (
     FOREIGN KEY (applicant_id) REFERENCES JobApplicants(id) ON DELETE CASCADE
 );
 
--- 5. Jobs Table
 CREATE TABLE Jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     recruiter_id INT NOT NULL,
@@ -60,7 +55,6 @@ CREATE TABLE Jobs (
     FOREIGN KEY (recruiter_id) REFERENCES Recruiters(id) ON DELETE CASCADE
 );
 
--- 6. JobSkillsets Table
 CREATE TABLE JobSkillsets (
     id INT AUTO_INCREMENT PRIMARY KEY,
     job_id INT NOT NULL,
@@ -68,7 +62,6 @@ CREATE TABLE JobSkillsets (
     FOREIGN KEY (job_id) REFERENCES Jobs(id) ON DELETE CASCADE
 );
 
--- 7. Applications Table
 CREATE TABLE Applications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -83,7 +76,6 @@ CREATE TABLE Applications (
     FOREIGN KEY (job_id) REFERENCES Jobs(id) ON DELETE CASCADE
 );
 
--- 8. Ratings Table
 CREATE TABLE Ratings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     category ENUM('job', 'applicant') NOT NULL,
