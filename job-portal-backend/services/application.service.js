@@ -1,10 +1,8 @@
 const { runQuery, callProcedure } = require("../db/query");
 
 exports.applyForJob = async (userId, jobId) => {
-  
   const [job] = await runQuery("SELECT recruiter_id FROM Jobs WHERE id = ?", [jobId]);
   if (!job) throw new Error(`Job ${jobId} not found`);
-
   
   const existing = await runQuery(
     "SELECT id FROM Applications WHERE user_id = ? AND job_id = ?",
