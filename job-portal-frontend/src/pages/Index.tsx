@@ -1,196 +1,222 @@
-
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Briefcase } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Briefcase, PieChart, Users, ArrowRight } from "lucide-react";
 import JobCategories from "@/components/jobs/JobCategories";
 import JobCard, { JobData } from "@/components/jobs/JobCard";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { jobService } from "@/services";
 
 const Index = () => {
-  // Mock featured jobs data
-  const featuredJobs: JobData[] = [
-    {
-      id: 1,
-      title: "Senior Frontend Developer",
-      company: "TechCorp Inc.",
-      location: "San Francisco, CA",
-      salary: "$120,000 - $150,000",
-      job_type: "Full-Time",
-      deadline: "2025-06-15",
-      skills: ["React", "TypeScript", "Tailwind CSS"]
-    },
-    {
-      id: 2,
-      title: "Data Scientist",
-      company: "AnalyticsMax",
-      location: "New York, NY",
-      salary: "$110,000 - $140,000",
-      job_type: "Full-Time",
-      deadline: "2025-06-20",
-      skills: ["Python", "Machine Learning", "SQL", "PyTorch"]
-    },
-    {
-      id: 3,
-      title: "UX/UI Designer",
-      company: "DesignHub",
-      location: "Remote",
-      salary: "$90,000 - $120,000",
-      job_type: "Full-Time",
-      deadline: "2025-06-25",
-      skills: ["Figma", "Adobe XD", "User Research", "Prototyping"]
-    },
-    {
-      id: 4,
-      title: "Backend Engineer",
-      company: "ServerStack",
-      location: "Austin, TX",
-      salary: "$130,000 - $160,000",
-      job_type: "Full-Time",
-      deadline: "2025-06-18",
-      skills: ["Node.js", "Express", "MongoDB", "AWS"]
-    }
-  ];
+  const [featuredJobs, setFeaturedJobs] = useState<JobData[]>([]);
+  const [jobStats, setJobStats] = useState({
+    totalJobs: 0,
+    totalCategories: 0,
+    activeJobs: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch jobs
+        const response = await jobService.getJobs();
+        const jobs = response.data;
+        
+        // Calculate stats
+        const categories = new Set();
+        
+        // Count total active positions based on max_positions
+        const totalPositions = jobs.reduce((total: number, job: any) => {
+          return total + (job.max_positions || 1);
+        }, 0);
+        
+        jobs.forEach((job: any) => {
+          if (job.category) categories.add(job.category);
+        });
+        
+        setJobStats({
+          totalJobs: jobs.length,
+          totalCategories: categories.size,
+          activeJobs: totalPositions
+        });
+        
+        // Get up to 4 jobs for featured section
+        const featuredJobsData = jobs.slice(0, 4).map((job: any) => ({
+          id: job.id,
+          title: job.title,
+          location: job.location,
+          salary: job.salary,
+          job_type: job.job_type.charAt(0).toUpperCase() + job.job_type.slice(1),
+          deadline: job.deadline,
+          skills: [job.category]
+        }));
+        
+        setFeaturedJobs(featuredJobsData);
+      } catch (error) {
+        console.error("Error fetching jobs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <Navbar />
-      
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-primary/10 to-secondary/10 py-12 md:py-20">
-        <div className="container-custom">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Find Your Dream Job Today
-            </h1>
-            <p className="text-xl text-gray-600 mb-8">
-              Connect with top employers and discover opportunities tailored to your skills and career goals.
-            </p>
-            
-            <div className="bg-white p-3 rounded-lg shadow-lg flex flex-col md:flex-row gap-3">
-              <div className="flex-1 flex items-center border rounded-md px-3 py-2">
-                <Search className="h-5 w-5 text-gray-400 mr-2" />
-                <input
-                  type="text"
-                  placeholder="Job title, keywords, or company"
-                  className="w-full outline-none text-gray-700"
-                />
+      <main className="flex-grow">
+        {/* Hero Section with Blue Gradient */}
+        <section className="bg-gradient-to-r from-blue-600 to-blue-700 py-20">
+          <div className="container mx-auto px-4 max-w-7xl">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-10">
+              <div className="lg:w-1/2">
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+                  Discover Your Perfect Career Opportunity
+                </h1>
+                <p className="text-xl text-blue-50 mb-8 max-w-xl">
+                  Connect with top employers and find the job that matches your skills, experience, and aspirations.
+                </p>
+                
+                <div className="flex flex-wrap gap-4">
+                  <Link
+                    to="/jobs"
+                    className="px-8 py-4 bg-white text-blue-600 font-semibold rounded-lg shadow-md hover:bg-blue-50 transition duration-300"
+                  >
+                    Browse All Jobs
+                  </Link>
+                  <Link
+                    to="/jobs?category=IT"
+                    className="px-8 py-4 bg-blue-800 text-white font-semibold rounded-lg shadow-md hover:bg-blue-900 transition duration-300"
+                  >
+                    IT Jobs
+                  </Link>
+                </div>
               </div>
-              <Link to="/jobs" className="btn-primary whitespace-nowrap">
-                Search Jobs
-              </Link>
-            </div>
-            
-            <div className="mt-6 flex flex-wrap justify-center gap-4">
-              <span className="text-sm text-gray-600">Popular searches:</span>
-              <Link to="/jobs?q=developer" className="text-sm text-primary hover:text-primary/80">
-                Developer
-              </Link>
-              <Link to="/jobs?q=designer" className="text-sm text-primary hover:text-primary/80">
-                Designer
-              </Link>
-              <Link to="/jobs?q=marketing" className="text-sm text-primary hover:text-primary/80">
-                Marketing
-              </Link>
-              <Link to="/jobs?q=remote" className="text-sm text-primary hover:text-primary/80">
-                Remote
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Job Categories */}
-      <div className="container-custom py-12">
-        <JobCategories />
-      </div>
-      
-      {/* Featured Jobs */}
-      <div className="bg-gray-50 py-12">
-        <div className="container-custom">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Featured Jobs</h2>
-            <Link to="/jobs" className="text-primary hover:text-primary/80 font-medium">
-              View All Jobs
-            </Link>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {featuredJobs.map((job) => (
-              <JobCard key={job.id} job={job} />
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      {/* CTA Section */}
-      <div className="container-custom py-16">
-        <div className="bg-primary/10 rounded-xl p-8 md:p-12">
-          <div className="md:flex md:items-center md:justify-between">
-            <div className="md:w-2/3">
-              <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
-                For Employers
-              </h2>
-              <p className="text-lg text-gray-600 mb-6">
-                Find the perfect candidate for your open position. Post a job and reach thousands of qualified professionals.
-              </p>
-              <Link to="/post-job" className="btn-primary inline-block">
-                Post a Job
-              </Link>
-            </div>
-            <div className="hidden md:block md:w-1/3">
-              <div className="flex justify-center">
-                <div className="rounded-full bg-white p-6">
-                  <Briefcase className="h-16 w-16 text-primary" />
+              
+              {/* Stats Cards */}
+              <div className="lg:w-1/2 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="bg-white p-6 rounded-xl shadow-lg border border-blue-50 transform transition-transform hover:scale-105">
+                    <div className="flex items-center mb-3">
+                      <div className="p-3 bg-blue-100 rounded-full mr-4">
+                        <Briefcase className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800">{loading ? "..." : jobStats.totalJobs}</h3>
+                    </div>
+                    <p className="text-sm text-gray-600">Total Jobs</p>
+                  </div>
+                  
+                  <div className="bg-white p-6 rounded-xl shadow-lg border border-blue-50 transform transition-transform hover:scale-105">
+                    <div className="flex items-center mb-3">
+                      <div className="p-3 bg-green-100 rounded-full mr-4">
+                        <PieChart className="h-6 w-6 text-green-600" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800">{loading ? "..." : jobStats.totalCategories}</h3>
+                    </div>
+                    <p className="text-sm text-gray-600">Categories</p>
+                  </div>
+                  
+                  <div className="bg-white p-6 rounded-xl shadow-lg border border-blue-50 transform transition-transform hover:scale-105">
+                    <div className="flex items-center mb-3">
+                      <div className="p-3 bg-purple-100 rounded-full mr-4">
+                        <Users className="h-6 w-6 text-purple-600" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-800">{loading ? "..." : jobStats.activeJobs}</h3>
+                    </div>
+                    <p className="text-sm text-gray-600">Total Positions</p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-      
-      {/* How It Works */}
-      <div className="bg-white py-12">
-        <div className="container-custom">
-          <h2 className="text-2xl font-bold text-center text-gray-900 mb-12">
-            How HireHub Works
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="bg-primary/10 rounded-full p-5 h-20 w-20 flex items-center justify-center mx-auto">
-                <span className="text-2xl font-bold text-primary">1</span>
+        </section>
+
+        {/* Featured Jobs */}
+        <section className="py-20 bg-gray-50">
+          <div className="container mx-auto px-4 max-w-7xl">
+            <div className="mb-12">
+              <div className="bg-white py-4 px-6 rounded-md border-l-[3px] border-blue-500 shadow-sm flex justify-between items-center">
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-800">Featured Opportunities</h2>
+                  <p className="text-gray-600 mt-2">Discover handpicked opportunities that match your skills</p>
+                </div>
+                <Link 
+                  to="/jobs" 
+                  className="flex items-center text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  View All Jobs <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
               </div>
-              <h3 className="text-lg font-bold mt-4 mb-2">Create an Account</h3>
-              <p className="text-gray-600">
-                Sign up as a job seeker or employer to get started with HireHub.
-              </p>
             </div>
             
-            <div className="text-center">
-              <div className="bg-primary/10 rounded-full p-5 h-20 w-20 flex items-center justify-center mx-auto">
-                <span className="text-2xl font-bold text-primary">2</span>
+            {loading ? (
+              <div className="flex justify-center py-16">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
               </div>
-              <h3 className="text-lg font-bold mt-4 mb-2">Complete Your Profile</h3>
-              <p className="text-gray-600">
-                Add your skills, experience, and preferences to stand out.
-              </p>
-            </div>
+            ) : (
+              <div className="flex justify-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 w-full">
+                  {featuredJobs.map((job) => (
+                    <JobCard key={job.id} job={job} />
+                  ))}
+                </div>
+              </div>
+            )}
             
-            <div className="text-center">
-              <div className="bg-primary/10 rounded-full p-5 h-20 w-20 flex items-center justify-center mx-auto">
-                <span className="text-2xl font-bold text-primary">3</span>
-              </div>
-              <h3 className="text-lg font-bold mt-4 mb-2">Apply or Post Jobs</h3>
-              <p className="text-gray-600">
-                Search and apply for jobs, or post openings to find great candidates.
-              </p>
+            <div className="mt-12 text-center">
+              <Link
+                to="/jobs"
+                className="inline-flex items-center px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-300"
+              >
+                Explore All Available Jobs <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
             </div>
           </div>
-        </div>
-      </div>
-      
+        </section>
+
+        {/* Job Categories */}
+        <section className="py-20 bg-white">
+          <div className="container mx-auto px-4 max-w-7xl">
+            <div className="mb-12">
+              <div className="bg-blue-50 py-4 px-6 rounded-md border-l-[3px] border-blue-500 shadow-sm">
+                <h2 className="text-3xl font-bold text-gray-800">Explore Job Categories</h2>
+                <p className="text-gray-600 mt-2">
+                  Browse opportunities by industry and find your perfect match
+                </p>
+              </div>
+            </div>
+            <JobCategories />
+          </div>
+        </section>
+        
+        {/* CTA Section */}
+        <section className="bg-gradient-to-r from-blue-600 to-blue-700 py-20">
+          <div className="container mx-auto px-4 max-w-7xl text-center">
+            <h2 className="text-3xl font-bold text-white mb-4">Ready to Take the Next Step in Your Career?</h2>
+            <p className="text-xl text-blue-50 mb-8 max-w-2xl mx-auto">
+              Join thousands of job seekers who found their dream jobs through our platform
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <Link
+                to="/jobs"
+                className="px-8 py-4 bg-white text-blue-600 font-bold rounded-lg shadow-lg hover:bg-blue-50 transition duration-300"
+              >
+                Find Jobs Now
+              </Link>
+              <Link
+                to="/profile"
+                className="px-8 py-4 bg-blue-700 text-white font-bold rounded-lg shadow-lg hover:bg-blue-800 transition duration-300"
+              >
+                Create Your Profile
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
       <Footer />
     </div>
   );

@@ -1,195 +1,199 @@
-
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import JobFilters from "@/components/jobs/JobFilters";
 import JobCard, { JobData } from "@/components/jobs/JobCard";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { jobService } from "../services";
+import { toast } from "@/components/ui/use-toast";
+
+// Map our API Job type to the JobData type used by components
+interface ApiJob {
+  id: number;
+  recruiter_id: number;
+  title: string;
+  category: string;
+  location: string;
+  max_applicants: number;
+  max_positions: number;
+  active_applications: number;
+  accepted_candidates: number;
+  date_of_posting: string;
+  deadline: string | null;
+  job_type: string;
+  duration: number;
+  salary: number;
+}
 
 const Jobs = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  
   const categoryParam = searchParams.get("category") || "";
-  const searchParam = searchParams.get("q") || "";
+  const searchParam = searchParams.get("search") || "";
+  const locationParam = searchParams.get("location") || "";
+  const jobTypeParam = searchParams.get("jobType") || "";
+  const minSalaryParam = searchParams.get("salaryMin") || "0";
+  const maxSalaryParam = searchParams.get("salaryMax") || "200000";
+  const durationParam = searchParams.get("duration") || "";
   
   const [jobs, setJobs] = useState<JobData[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<JobData[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Initialize filters from URL parameters
   const [filters, setFilters] = useState({
     searchTerm: searchParam,
-    location: "",
-    jobType: [],
-    salaryRange: [0, 200000]
+    location: locationParam,
+    jobType: jobTypeParam ? jobTypeParam.split(',').map(type => 
+      type.charAt(0).toUpperCase() + type.slice(1)) : [],
+    salaryRange: [
+      parseInt(minSalaryParam) || 0,
+      parseInt(maxSalaryParam) || 200000
+    ] as [number, number],
+    category: categoryParam || undefined,
+    duration: durationParam ? parseInt(durationParam) : undefined
   });
 
-  // Mock jobs data
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      const mockJobs: JobData[] = [
-        {
-          id: 1,
-          title: "Senior Frontend Developer",
-          company: "TechCorp Inc.",
-          location: "San Francisco, CA",
-          salary: "$120,000 - $150,000",
-          job_type: "Full-Time",
-          deadline: "2025-06-15",
-          skills: ["React", "TypeScript", "Tailwind CSS"]
-        },
-        {
-          id: 2,
-          title: "Data Scientist",
-          company: "AnalyticsMax",
-          location: "New York, NY",
-          salary: "$110,000 - $140,000",
-          job_type: "Full-Time",
-          deadline: "2025-06-20",
-          skills: ["Python", "Machine Learning", "SQL", "PyTorch"]
-        },
-        {
-          id: 3,
-          title: "UX/UI Designer",
-          company: "DesignHub",
-          location: "Remote",
-          salary: "$90,000 - $120,000",
-          job_type: "Full-Time",
-          deadline: "2025-06-25",
-          skills: ["Figma", "Adobe XD", "User Research", "Prototyping"]
-        },
-        {
-          id: 4,
-          title: "Backend Engineer",
-          company: "ServerStack",
-          location: "Austin, TX",
-          salary: "$130,000 - $160,000",
-          job_type: "Full-Time",
-          deadline: "2025-06-18",
-          skills: ["Node.js", "Express", "MongoDB", "AWS"]
-        },
-        {
-          id: 5,
-          title: "Product Manager",
-          company: "ProductWave",
-          location: "Seattle, WA",
-          salary: "$125,000 - $155,000",
-          job_type: "Full-Time",
-          deadline: "2025-07-05",
-          skills: ["Product Strategy", "Roadmapping", "User Stories", "Agile"]
-        },
-        {
-          id: 6,
-          title: "Marketing Specialist",
-          company: "GrowthLabs",
-          location: "Chicago, IL",
-          salary: "$70,000 - $90,000",
-          job_type: "Full-Time",
-          deadline: "2025-06-30",
-          skills: ["Digital Marketing", "SEO", "Social Media", "Content Creation"]
-        },
-        {
-          id: 7,
-          title: "Financial Analyst",
-          company: "MoneyMetrics",
-          location: "Boston, MA",
-          salary: "$85,000 - $110,000",
-          job_type: "Full-Time",
-          deadline: "2025-07-10",
-          skills: ["Financial Modeling", "Excel", "Forecasting", "Budgeting"]
-        },
-        {
-          id: 8,
-          title: "DevOps Engineer",
-          company: "CloudNine",
-          location: "Remote",
-          salary: "$115,000 - $145,000",
-          job_type: "Full-Time",
-          deadline: "2025-07-15",
-          skills: ["Docker", "Kubernetes", "CI/CD", "AWS", "Terraform"]
-        },
-        {
-          id: 9,
-          title: "Research Scientist",
-          company: "ScienceMax",
-          location: "Cambridge, MA",
-          salary: "$100,000 - $140,000",
-          job_type: "Full-Time",
-          deadline: "2025-07-20",
-          skills: ["Research", "Data Analysis", "Lab Experience", "Publishing"]
-        },
-        {
-          id: 10,
-          title: "Customer Support Representative",
-          company: "HelpDesk Inc.",
-          location: "Denver, CO",
-          salary: "$45,000 - $60,000",
-          job_type: "Part-Time",
-          deadline: "2025-06-22",
-          skills: ["Communication", "Problem Solving", "Patience", "Technical Knowledge"]
-        }
-      ];
+  // Function to directly call the backend API with current URL params
+  const fetchJobs = async () => {
+    setLoading(true);
+    try {
+      // Log the current search params for debugging
+      console.log("Current Search Params:", Object.fromEntries(searchParams.entries()));
       
-      setJobs(mockJobs);
-      setLoading(false);
-    }, 1000);
-  }, []);
-
-  useEffect(() => {
-    let filtered = [...jobs];
-    
-    // Filter by search term
-    if (filters.searchTerm) {
-      filtered = filtered.filter(job => 
-        job.title.toLowerCase().includes(filters.searchTerm.toLowerCase()) || 
-        (job.company && job.company.toLowerCase().includes(filters.searchTerm.toLowerCase()))
-      );
-    }
-    
-    // Filter by location
-    if (filters.location) {
-      filtered = filtered.filter(job => 
-        job.location && job.location.toLowerCase().includes(filters.location.toLowerCase())
-      );
-    }
-    
-    // Filter by job type
-    if (filters.jobType.length > 0) {
-      filtered = filtered.filter(job => 
-        filters.jobType.includes(job.job_type)
-      );
-    }
-    
-    // Filter by category
-    if (categoryParam) {
-      // This is a simplified approach - in real app you'd have proper category mapping
-      filtered = filtered.filter(job => {
-        if (categoryParam === "IT & Software") {
-          return job.skills?.some(skill => ["React", "TypeScript", "AWS", "Docker", "Node.js"].includes(skill));
-        } else if (categoryParam === "Finance") {
-          return job.skills?.some(skill => ["Financial Modeling", "Excel", "Forecasting", "Budgeting"].includes(skill));
-        } else if (categoryParam === "Science") {
-          return job.skills?.some(skill => ["Research", "Data Analysis", "Lab Experience", "Publishing"].includes(skill));
-        }
-        return true;
+      // Build the API URL with the current search params - direct approach
+      let queryString = new URLSearchParams(searchParams).toString();
+      // Ensure duration is being passed through correctly (debugging)
+      if (durationParam) {
+        console.log(`Duration param exists: ${durationParam}`);
+      }
+      
+      const url = queryString ? `/jobs?${queryString}` : '/jobs';
+      console.log("Fetching from URL:", url);
+      
+      const response = await jobService.getJobs(null, url);
+      console.log("API Response:", response);
+      
+      // Response comes as array directly, not nested under 'jobs'
+      const apiJobs = Array.isArray(response.data) ? response.data : [];
+      
+      if (apiJobs.length === 0) {
+        console.log("No jobs returned from API");
+      }
+      
+      // Map API jobs to our JobData format
+      const mappedJobs: JobData[] = apiJobs.map((job: ApiJob) => ({
+        id: job.id,
+        title: job.title,
+        recruiter_id: job.recruiter_id,
+        category: job.category,
+        location: job.location,
+        salary: job.salary, // Keep as number for formatting in the JobCard
+        job_type: job.job_type.charAt(0).toUpperCase() + job.job_type.slice(1), // Capitalize job type
+        duration: job.duration,
+        max_positions: job.max_positions,
+        max_applicants: job.max_applicants,
+        date_of_posting: job.date_of_posting,
+        skills: [job.category], // Using category as a skill for now
+      }));
+      
+      setJobs(mappedJobs);
+      setFilteredJobs(mappedJobs);
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      
+      toast({
+        title: "Error",
+        description: "Failed to load jobs. Please try again later.",
+        variant: "destructive"
       });
+      
+      // Fallback to empty array if error
+      setJobs([]);
+      setFilteredJobs([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load jobs whenever URL params change
+  useEffect(() => {
+    fetchJobs();
+    
+    // Update filter state to match URL params
+    setFilters({
+      searchTerm: searchParam,
+      location: locationParam,
+      jobType: jobTypeParam ? jobTypeParam.split(',').map(type => 
+        type.charAt(0).toUpperCase() + type.slice(1)) : [],
+      salaryRange: [
+        parseInt(minSalaryParam) || 0,
+        parseInt(maxSalaryParam) || 200000
+      ] as [number, number],
+      category: categoryParam || undefined,
+      duration: durationParam ? parseInt(durationParam) : undefined
+    });
+  }, [searchParams]);
+
+  // Apply local filtering for category since that might be client-side only
+  useEffect(() => {
+    if (!categoryParam) {
+      return;
     }
     
-    // Filter by salary range
-    filtered = filtered.filter(job => {
-      if (!job.salary) return true;
-      
-      // Extract min salary from format like "$45,000 - $60,000"
-      const salaryMatch = job.salary.match(/\$([0-9,]+)/g);
-      if (!salaryMatch || salaryMatch.length < 1) return true;
-      
-      const minSalary = parseInt(salaryMatch[0].replace(/[$,]/g, ''));
-      return minSalary >= filters.salaryRange[0] && minSalary <= filters.salaryRange[1];
+    // Filter by category (client-side)
+    const filtered = jobs.filter(job => {
+      // Add your category filtering logic based on skills or other attributes
+      return job.category?.toLowerCase() === categoryParam.toLowerCase();
     });
     
     setFilteredJobs(filtered);
-  }, [jobs, filters, categoryParam]);
+  }, [jobs, categoryParam]);
 
-  const handleFilterChange = (newFilters: any) => {
-    setFilters(newFilters);
+  // Handle filter changes - update URL and trigger API request
+  const handleFilterChange = async (newFilters: any) => {
+    // Create a new URLSearchParams object (fresh, not from existing)
+    const newParams = new URLSearchParams();
+    
+    // Only add params with values
+    if (newFilters.searchTerm) {
+      newParams.set("search", newFilters.searchTerm);
+    }
+    
+    if (newFilters.location) {
+      newParams.set("location", newFilters.location);
+    }
+    
+    if (newFilters.jobType && newFilters.jobType.length > 0) {
+      const jobTypeString = newFilters.jobType.map((type: string) => type.toLowerCase()).join(',');
+      newParams.set("jobType", jobTypeString);
+    }
+    
+    if (newFilters.salaryRange && newFilters.salaryRange.length === 2) {
+      if (newFilters.salaryRange[0] > 0) {
+        newParams.set("salaryMin", newFilters.salaryRange[0].toString());
+      }
+      if (newFilters.salaryRange[1] < 200000) {
+        newParams.set("salaryMax", newFilters.salaryRange[1].toString());
+      }
+    }
+    
+    if (newFilters.category) {
+      newParams.set("category", newFilters.category);
+    }
+    
+    if (newFilters.duration) {
+      // Ensure duration is added correctly to URL params
+      console.log(`Setting duration filter: ${newFilters.duration}`);
+      newParams.set("duration", newFilters.duration.toString());
+    }
+    
+    // Log the params we're about to set
+    console.log("Setting URL params:", Object.fromEntries(newParams.entries()));
+    
+    // Set the new URL with filters - this will also trigger a re-fetch
+    setSearchParams(newParams);
   };
 
   return (
@@ -207,7 +211,7 @@ const Jobs = () => {
             </span>
           </div>
           
-          <JobFilters onFilterChange={handleFilterChange} />
+          <JobFilters onFilterChange={handleFilterChange} initialFilters={filters} />
           
           {loading ? (
             <div className="flex justify-center py-12">
