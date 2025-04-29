@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import profileService, { isJobSeekerProfile, isRecruiterProfile } from "@/services/profileService";
+import authService from "@/services/authService";
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -17,12 +18,9 @@ const Profile = () => {
   const [jobSeekerData, setJobSeekerData] = useState({
     name: "",
     email: "",
-    phone: "",
-    location: "",
     skills: "",
-    education: "",
-    experience: "",
-    bio: ""
+    resume: "",
+    profile: ""
   });
   
   // Form fields for recruiter
@@ -37,50 +35,72 @@ const Profile = () => {
   
   useEffect(() => {
     // Check if user is logged in
-    const userJson = localStorage.getItem("user");
-    
-    if (!userJson) {
-      // Redirect to login if not logged in
+    if (!authService.isAuthenticated()) {
       toast.error("Please sign in to access your profile");
       navigate("/auth?type=login");
       return;
     }
     
-    try {
-      const user = JSON.parse(userJson);
-      setUserType(user.userType || "jobseeker");
-      
-      // Simulate API call to fetch user profile data
-      setTimeout(() => {
-        if (user.userType === "recruiter") {
-          setRecruiterData({
-            name: "John Recruiter",
-            email: user.email || "john@recruiter.com",
-            phone: "+1 123-456-7890",
-            company: "TechCorp Inc.",
-            position: "Senior Recruiter",
-            bio: "Experienced recruiter specializing in tech talent acquisition."
-          });
-        } else {
+    // Load profile data from the backend
+    const loadProfile = async () => {
+      try {
+        setLoading(true);
+        const profile = await profileService.getProfile();
+        
+        if (isJobSeekerProfile(profile)) {
+          setUserType("jobseeker");
           setJobSeekerData({
-            name: "Jane Applicant",
-            email: user.email || "jane@example.com",
-            phone: "+1 234-567-8901",
-            location: "San Francisco, CA",
-            skills: "React, TypeScript, JavaScript, HTML, CSS, Node.js",
-            education: "Bachelor's in Computer Science, XYZ University",
-            experience: "5 years of software development experience",
-            bio: "Full stack developer passionate about building user-friendly web applications."
+            name: profile.name || "",
+            email: profile.email || "",
+            skills: profile.skills || "",
+            resume: profile.resume || "",
+            profile: profile.profile || ""
+          });
+        } else if (isRecruiterProfile(profile)) {
+          setUserType("recruiter");
+          setRecruiterData({
+            name: profile.name || "",
+            email: profile.email || "",
+            phone: profile.phone || "",
+            company: "", // Map to company if needed in the frontend
+            position: "", // Map to position if needed in the frontend
+            bio: profile.bio || ""
           });
         }
+      } catch (error) {
+        console.error("Error loading profile:", error);
+        toast.error("Failed to load profile data");
         
+        // Fallback to mock data if API fails
+        const user = authService.getCurrentUser();
+        if (user) {
+          setUserType(user.type || "jobseeker");
+          
+          if (user.type === "recruiter") {
+            setRecruiterData({
+              name: "John Recruiter",
+              email: user.email || "john@example.com",
+              phone: "+1 123-456-7890",
+              company: "TechCorp Inc.",
+              position: "Senior Recruiter",
+              bio: "Experienced recruiter specializing in tech talent acquisition."
+            });
+          } else {
+            setJobSeekerData({
+              name: "Jane Applicant",
+              email: user.email || "jane@example.com",
+              skills: "React, TypeScript, JavaScript, HTML, CSS, Node.js",
+              resume: "",
+              profile: ""
+            });
+          }
+        }
+      } finally {
         setLoading(false);
-      }, 1000);
-      
-    } catch (error) {
-      console.error("Error parsing user data:", error);
-      navigate("/auth?type=login");
-    }
+      }
+    };
+    
+    loadProfile();
   }, [navigate]);
   
   const handleJobSeekerChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -93,14 +113,35 @@ const Profile = () => {
     setRecruiterData(prev => ({ ...prev, [name]: value }));
   };
   
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
     
-    // Simulate API call to update profile
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      // Prepare update data based on user type
+      if (userType === "jobseeker") {
+        await profileService.updateProfile({
+          name: jobSeekerData.name,
+          skills: jobSeekerData.skills,
+          resume: jobSeekerData.resume,
+          profile: jobSeekerData.profile
+          // Only send fields that can be updated in the backend
+        });
+      } else if (userType === "recruiter") {
+        await profileService.updateProfile({
+          name: recruiterData.name,
+          phone: recruiterData.phone,
+          bio: recruiterData.bio
+          // Only send fields that can be updated in the backend
+        });
+      }
+      
       toast.success("Profile updated successfully");
-    }, 1500);
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      toast.error("Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
   };
   
   if (loading) {
@@ -162,34 +203,6 @@ const Profile = () => {
                         readOnly
                       />
                     </div>
-                    
-                    <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number
-                      </label>
-                      <input
-                        type="tel"
-                        id="phone"
-                        name="phone"
-                        value={jobSeekerData.phone}
-                        onChange={handleJobSeekerChange}
-                        className="input-field"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
-                        Location
-                      </label>
-                      <input
-                        type="text"
-                        id="location"
-                        name="location"
-                        value={jobSeekerData.location}
-                        onChange={handleJobSeekerChange}
-                        className="input-field"
-                      />
-                    </div>
                   </div>
                   
                   <div>
@@ -206,69 +219,43 @@ const Profile = () => {
                     ></textarea>
                   </div>
                   
-                  <div>
-                    <label htmlFor="education" className="block text-sm font-medium text-gray-700 mb-1">
-                      Education
+                  <div className="pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Resume Link
                     </label>
-                    <textarea
-                      id="education"
-                      name="education"
-                      rows={2}
-                      value={jobSeekerData.education}
-                      onChange={handleJobSeekerChange}
-                      className="input-field"
-                    ></textarea>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="experience" className="block text-sm font-medium text-gray-700 mb-1">
-                      Experience
-                    </label>
-                    <textarea
-                      id="experience"
-                      name="experience"
-                      rows={2}
-                      value={jobSeekerData.experience}
-                      onChange={handleJobSeekerChange}
-                      className="input-field"
-                    ></textarea>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-1">
-                      Bio
-                    </label>
-                    <textarea
-                      id="bio"
-                      name="bio"
-                      rows={4}
-                      value={jobSeekerData.bio}
-                      onChange={handleJobSeekerChange}
-                      className="input-field"
-                    ></textarea>
+                    <div className="flex items-center space-x-4">
+                      <input
+                        type="url"
+                        id="resume"
+                        name="resume"
+                        placeholder="https://example.com/your-resume"
+                        value={jobSeekerData.resume}
+                        onChange={handleJobSeekerChange}
+                        className="w-full input-field"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Provide a link to your online resume (Google Drive, Dropbox, etc)
+                    </p>
                   </div>
                   
                   <div className="pt-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Resume
+                      Profile Link
                     </label>
                     <div className="flex items-center space-x-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="relative"
-                      >
-                        Upload Resume
-                        <input
-                          type="file"
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          accept=".pdf,.doc,.docx"
-                        />
-                      </Button>
-                      <span className="text-sm text-gray-500">No file selected</span>
+                      <input
+                        type="url"
+                        id="profile"
+                        name="profile"
+                        placeholder="https://example.com/your-profile"
+                        value={jobSeekerData.profile}
+                        onChange={handleJobSeekerChange}
+                        className="w-full input-field"
+                      />
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      Accepted formats: PDF, DOC, DOCX. Max size: 5MB
+                      Provide a link to your LinkedIn or other professional profile
                     </p>
                   </div>
                 </div>

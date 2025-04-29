@@ -33,11 +33,18 @@ BEGIN
     WHERE j.recruiter_id = rid
     GROUP BY j.id;
 
-    SELECT a.id AS application_id, ja.name AS applicant_name, a.status, a.date_of_application
+    SELECT 
+        a.id AS application_id, 
+        ja.name AS applicant_name, 
+        j.title AS job_title,
+        a.status, 
+        a.date_of_application
     FROM Applications a
     JOIN JobApplicants ja ON a.user_id = ja.user_id
     JOIN Jobs j ON a.job_id = j.id
-    WHERE j.recruiter_id = rid;
+    WHERE j.recruiter_id = rid
+    ORDER BY a.date_of_application DESC
+    LIMIT 10;
 END;
 //
 

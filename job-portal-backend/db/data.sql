@@ -1,3 +1,20 @@
+-- 1. Insert demo users into the Users table
+INSERT INTO Users (email, password, type, rating) VALUES
+('demo.applicant@example.com', 'demo123', 'applicant', 4.5),
+('demo.recruiter@example.com', 'demo123', 'recruiter', 4.5);
+
+SET @demo_applicant_id = LAST_INSERT_ID();
+SET @demo_recruiter_id = @demo_applicant_id + 1;
+
+INSERT INTO JobApplicants (user_id, name, skills, resume, profile) VALUES
+(@demo_applicant_id, 'Demo Applicant', 'JavaScript, React, Node.js, SQL', 'demo_resume.pdf', 'Demo Applicant Profile');
+
+INSERT INTO Recruiters (user_id, name, contact_number, bio) VALUES
+(@demo_recruiter_id, 'Demo Recruiter', '03000000000', 'This is a demo recruiter account for testing purposes.');
+
+INSERT INTO Education (applicant_id, institution_name, start_year, end_year) VALUES
+(LAST_INSERT_ID() - 1, 'Demo University', 2018, 2022);
+
 -- Populate Users
 INSERT INTO Users (email, password, type, rating) VALUES
 ('recruiter1@example.com', 'pass123', 'recruiter', 4.5),
@@ -179,17 +196,17 @@ INSERT INTO Applications (user_id, recruiter_id, job_id, status) VALUES
 (17, 7, 7, 'applied'),
 (18, 8, 8, 'shortlisted'),
 (19, 9, 9, 'accepted'),
-(20, 10, 10, 'rejected'),
-(21, 11, 11, 'applied'),
-(22, 12, 12, 'shortlisted'),
-(23, 13, 13, 'accepted'),
-(24, 14, 14, 'rejected'),
-(25, 15, 15, 'applied'),
-(26, 16, 16, 'cancelled'),
-(27, 17, 17, 'applied'),
-(28, 18, 18, 'shortlisted'),
-(29, 19, 19, 'accepted'),
-(30, 20, 20, 'rejected');
+(20, 1, 10, 'rejected'),
+(21, 1, 11, 'applied'),
+(22, 2, 12, 'shortlisted'),
+(23, 3, 13, 'accepted'),
+(24, 4, 14, 'rejected'),
+(25, 5, 15, 'applied'),
+(26, 6, 16, 'cancelled'),
+(27, 7, 17, 'applied'),
+(28, 8, 18, 'shortlisted'),
+(29, 9, 19, 'accepted'),
+(30, 2, 20, 'rejected');
 
 -- Populate Ratings
 INSERT INTO Ratings (category, receiver_id, sender_id, rating) VALUES

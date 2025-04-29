@@ -1,4 +1,3 @@
-
 import React from "react";
 import { 
   Briefcase, 
@@ -8,7 +7,9 @@ import {
   UserPlus,
   Users,
   FileText,
-  Star
+  Star,
+  BarChart2,
+  Calendar
 } from "lucide-react";
 
 interface StatsCardProps {
@@ -35,77 +36,95 @@ const StatsCard = ({ title, value, description, icon, color }: StatsCardProps) =
 };
 
 interface DashboardStatsProps {
-  userType: "jobseeker" | "recruiter";
+  userType: "applicant" | "recruiter";
+  stats?: {
+    totalJobs?: number;
+    totalApplicants?: number;
+    newApplicants?: number;
+    rating?: number;
+    totalApplications?: number;
+    pendingApplications?: number;
+    interviewApplications?: number;
+    rejectedApplications?: number;
+    applicantsPerJob?: number;
+  };
 }
 
-const DashboardStats = ({ userType }: DashboardStatsProps) => {
-  const jobSeekerStats = [
+const DashboardStats = ({ userType, stats }: DashboardStatsProps) => {
+  // Calculate applicants per job
+  const applicantsPerJob = stats?.totalJobs && stats.totalJobs > 0 
+    ? (stats.totalApplicants || 0) / stats.totalJobs 
+    : 0;
+
+  // Default stats for job seeker
+  const defaultJobSeekerStats = [
     {
       title: "Total Applications",
-      value: 12,
-      description: "Across 8 companies",
+      value: stats?.totalApplications || 0,
+      description: "Applications submitted",
       icon: <FileText className="h-5 w-5 text-blue-600" />,
       color: "bg-blue-100",
     },
     {
       title: "Pending",
-      value: 5,
+      value: stats?.pendingApplications || 0,
       description: "Applications awaiting review",
       icon: <Clock className="h-5 w-5 text-amber-600" />,
       color: "bg-amber-100",
     },
     {
       title: "Interviews",
-      value: 3,
-      description: "Scheduled this week",
+      value: stats?.interviewApplications || 0,
+      description: "Applications in interview stage",
       icon: <CheckCircle className="h-5 w-5 text-green-600" />,
       color: "bg-green-100",
     },
     {
       title: "Rejected",
-      value: 4,
-      description: "Better luck next time",
+      value: stats?.rejectedApplications || 0,
+      description: "Applications not selected",
       icon: <AlertCircle className="h-5 w-5 text-red-600" />,
       color: "bg-red-100",
     },
   ];
 
-  const recruiterStats = [
+  // Default stats for recruiter
+  const defaultRecruiterStats = [
     {
       title: "Active Jobs",
-      value: 8,
+      value: stats?.totalJobs || 0,
       description: "Currently accepting applications",
       icon: <Briefcase className="h-5 w-5 text-blue-600" />,
       color: "bg-blue-100",
     },
     {
-      title: "New Applicants",
-      value: 43,
-      description: "Last 7 days",
-      icon: <UserPlus className="h-5 w-5 text-green-600" />,
+      title: "Applicants Per Job",
+      value: applicantsPerJob.toFixed(1),
+      description: "Average applications received",
+      icon: <BarChart2 className="h-5 w-5 text-green-600" />,
       color: "bg-green-100",
     },
     {
       title: "Total Applicants",
-      value: 218,
+      value: stats?.totalApplicants || 0,
       description: "Across all job postings",
       icon: <Users className="h-5 w-5 text-purple-600" />,
       color: "bg-purple-100",
     },
     {
       title: "Average Rating",
-      value: "4.8",
+      value: stats?.rating?.toFixed(1) || "N/A",
       description: "Based on applicant feedback",
       icon: <Star className="h-5 w-5 text-amber-600" />,
       color: "bg-amber-100",
     },
   ];
 
-  const stats = userType === "jobseeker" ? jobSeekerStats : recruiterStats;
+  const displayStats = userType === "applicant" ? defaultJobSeekerStats : defaultRecruiterStats;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {stats.map((stat) => (
+      {displayStats.map((stat) => (
         <StatsCard
           key={stat.title}
           title={stat.title}

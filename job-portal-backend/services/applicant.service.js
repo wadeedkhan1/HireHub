@@ -49,7 +49,7 @@ exports.addEducation = async (userId, data) => {
 
   if (!applicantId) throw new Error("Applicant not found");
 
-  const { institution_name, start_year, end_year } = data;
+  const { institution_name, start_year, end_year, field } = data;
 
   if (institution_name === undefined || start_year === undefined || end_year === undefined) {
     throw new Error("One or more required fields are missing");
@@ -58,10 +58,11 @@ exports.addEducation = async (userId, data) => {
   console.log("Data received for education:", data);
 
   const [result] = await runQuery(
-    "INSERT INTO Education (applicant_id, institution_name, start_year, end_year) VALUES (?, ?, ?, ?)",
+    "INSERT INTO Education (applicant_id, institution_name, field, start_year, end_year) VALUES (?, ?, ?, ?, ?)",
     [
       applicantId,
       institution_name,
+      field || "Not Specified",
       start_year,
       end_year,
     ]
@@ -70,6 +71,7 @@ exports.addEducation = async (userId, data) => {
   return {
     id: result.insertId,
     institution_name,
+    field: field || "Not Specified",
     start_year,
     end_year,
   };
@@ -103,7 +105,7 @@ exports.updateEducation = async (userId, eduId, data) => {
   const fields = [];
   const values = [];
 
-  for (const key of ["institution_name", "start_year", "end_year"]) {
+  for (const key of ["institution_name", "field", "start_year", "end_year"]) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
       values.push(data[key] ?? null);

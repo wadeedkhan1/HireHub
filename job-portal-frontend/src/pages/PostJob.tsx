@@ -1,30 +1,50 @@
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import api from "@/services/api";
+import authService from "@/services/authService";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+
+interface JobPostResponse {
+  message: string;
+  job: {
+    fieldCount: number;
+    affectedRows: number;
+    insertId: number;
+    info: string;
+    serverStatus: number;
+    warningStatus: number;
+    changedRows: number;
+  };
+}
 
 const PostJob = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [skills, setSkills] = useState<string[]>([]);
-  const [newSkill, setNewSkill] = useState("");
+  const [showDialog, setShowDialog] = useState(false);
+  const [responseData, setResponseData] = useState<JobPostResponse | null>(null);
   
   const [jobData, setJobData] = useState({
     title: "",
-    company: "",
-    location: "",
-    job_type: "Full-Time",
-    duration: "",
-    salary_min: "",
-    salary_max: "",
-    max_applicants: "50",
-    max_positions: "1",
-    deadline: "",
-    description: ""
+    category: "IT",
+    location: "Remote",
+    max_applicants: 10,
+    max_positions: 2,
+    job_type: "full-time",
+    duration: 12,
+    salary: 80000,
+    deadline: ""
   });
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -32,42 +52,45 @@ const PostJob = () => {
     setJobData(prev => ({ ...prev, [name]: value }));
   };
   
-  const handleAddSkill = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && newSkill.trim() !== "") {
-      e.preventDefault();
-      if (!skills.includes(newSkill.trim())) {
-        setSkills([...skills, newSkill.trim()]);
-      }
-      setNewSkill("");
-    }
-  };
-  
-  const handleRemoveSkill = (skillToRemove: string) => {
-    setSkills(skills.filter(skill => skill !== skillToRemove));
-  };
-  
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Basic validation
-    if (!jobData.title || !jobData.company || !jobData.location || !jobData.deadline || !jobData.description) {
+    if (!jobData.title || !jobData.location || !jobData.deadline) {
       toast.error("Please fill in all required fields");
-      return;
-    }
-    
-    if (skills.length === 0) {
-      toast.error("Please add at least one required skill");
       return;
     }
     
     setLoading(true);
     
-    // Simulate API call to post job
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // Get the current user ID
+      const user = authService.getCurrentUser();
+      
+      if (!user) {
+        toast.error("You must be logged in to post a job");
+        navigate("/auth?type=login");
+        return;
+      }
+      
+      // Prepare the job data including user_id
+      const postData = {
+        user_id: user.id,
+        ...jobData
+      };
+      
+      // Make the API call
+      const response = await api.post<JobPostResponse>('/jobs', postData);
+      
+      setResponseData(response.data);
+      setShowDialog(true);
       toast.success("Job posted successfully!");
-      navigate("/dashboard?tab=posted-jobs");
-    }, 1500);
+    } catch (error: any) {
+      console.error("Error posting job:", error);
+      toast.error(error.response?.data?.message || "Failed to post job. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -100,19 +123,26 @@ const PostJob = () => {
                   </div>
                   
                   <div>
-                    <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-1">
-                      Company Name <span className="text-red-500">*</span>
+                    <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+                      Category <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      id="company"
-                      name="company"
-                      value={jobData.company}
+                    <select
+                      id="category"
+                      name="category"
+                      value={jobData.category}
                       onChange={handleChange}
                       className="input-field"
-                      placeholder="e.g. TechCorp Inc."
                       required
-                    />
+                    >
+                      <option value="IT">IT</option>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Design">Design</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Sales">Sales</option>
+                      <option value="Finance">Finance</option>
+                      <option value="HR">HR</option>
+                      <option value="Other">Other</option>
+                    </select>
                   </div>
                   
                   <div>
@@ -143,63 +173,48 @@ const PostJob = () => {
                       className="input-field"
                       required
                     >
-                      <option value="Full-Time">Full-Time</option>
-                      <option value="Part-Time">Part-Time</option>
-                      <option value="Contract">Contract</option>
-                      <option value="Internship">Internship</option>
-                      <option value="Temporary">Temporary</option>
+                      <option value="full-time">Full-Time</option>
+                      <option value="part-time">Part-Time</option>
+                      <option value="contract">Contract</option>
+                      <option value="internship">Internship</option>
+                      <option value="temporary">Temporary</option>
                     </select>
                   </div>
                   
                   <div>
                     <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-1">
-                      Duration
+                      Duration (months) <span className="text-red-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      type="number"
                       id="duration"
                       name="duration"
                       value={jobData.duration}
                       onChange={handleChange}
                       className="input-field"
-                      placeholder="e.g. 6 months, 1 year, Permanent"
+                      placeholder="e.g. 12"
+                      min="1"
+                      required
                     />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label htmlFor="salary_min" className="block text-sm font-medium text-gray-700 mb-1">
-                        Salary Min
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-gray-500">$</span>
-                        <input
-                          type="number"
-                          id="salary_min"
-                          name="salary_min"
-                          value={jobData.salary_min}
-                          onChange={handleChange}
-                          className="input-field pl-7"
-                          placeholder="Min"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="salary_max" className="block text-sm font-medium text-gray-700 mb-1">
-                        Salary Max
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-gray-500">$</span>
-                        <input
-                          type="number"
-                          id="salary_max"
-                          name="salary_max"
-                          value={jobData.salary_max}
-                          onChange={handleChange}
-                          className="input-field pl-7"
-                          placeholder="Max"
-                        />
-                      </div>
+                  <div>
+                    <label htmlFor="salary" className="block text-sm font-medium text-gray-700 mb-1">
+                      Salary (annual) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-gray-500">$</span>
+                      <input
+                        type="number"
+                        id="salary"
+                        name="salary"
+                        value={jobData.salary}
+                        onChange={handleChange}
+                        className="input-field pl-7"
+                        placeholder="e.g. 80000"
+                        min="1"
+                        required
+                      />
                     </div>
                   </div>
                 </div>
@@ -210,7 +225,7 @@ const PostJob = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="max_applicants" className="block text-sm font-medium text-gray-700 mb-1">
-                      Maximum Applicants
+                      Maximum Applicants <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -220,12 +235,13 @@ const PostJob = () => {
                       onChange={handleChange}
                       className="input-field"
                       min="1"
+                      required
                     />
                   </div>
                   
                   <div>
                     <label htmlFor="max_positions" className="block text-sm font-medium text-gray-700 mb-1">
-                      Number of Positions
+                      Number of Positions <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -235,6 +251,7 @@ const PostJob = () => {
                       onChange={handleChange}
                       className="input-field"
                       min="1"
+                      required
                     />
                   </div>
                   
@@ -252,67 +269,6 @@ const PostJob = () => {
                       required
                     />
                   </div>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Required Skills</h3>
-                <div>
-                  <label htmlFor="skills" className="block text-sm font-medium text-gray-700 mb-1">
-                    Add Skills <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      id="skills"
-                      value={newSkill}
-                      onChange={(e) => setNewSkill(e.target.value)}
-                      onKeyDown={handleAddSkill}
-                      className="input-field"
-                      placeholder="Type a skill and press Enter (e.g. React, TypeScript)"
-                    />
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {skills.map((skill) => (
-                      <div 
-                        key={skill} 
-                        className="bg-primary/10 text-primary rounded-full px-3 py-1 text-sm flex items-center"
-                      >
-                        {skill}
-                        <button 
-                          type="button" 
-                          onClick={() => handleRemoveSkill(skill)}
-                          className="ml-1.5 text-primary hover:text-primary/80"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                    
-                    {skills.length === 0 && (
-                      <p className="text-sm text-gray-500">No skills added yet</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Job Description</h3>
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows={8}
-                    value={jobData.description}
-                    onChange={handleChange}
-                    className="input-field"
-                    placeholder="Provide a detailed job description, responsibilities, requirements, benefits, etc."
-                    required
-                  ></textarea>
                 </div>
               </div>
               
@@ -348,6 +304,63 @@ const PostJob = () => {
           </form>
         </div>
       </div>
+      
+      {/* Success Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              Job Posted Successfully
+            </DialogTitle>
+            <DialogDescription>
+              Your job has been posted and is now available for applicants.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="p-4 bg-gray-50 rounded-md">
+            <h4 className="text-sm font-medium mb-2">Job Details:</h4>
+            {responseData && (
+              <div className="text-sm">
+                <p className="mb-1"><span className="font-medium">Job ID:</span> {responseData.job.insertId}</p>
+                <p className="mb-1"><span className="font-medium">Status:</span> {responseData.message}</p>
+                <p className="mb-1"><span className="font-medium">Title:</span> {jobData.title}</p>
+                <p className="mb-1"><span className="font-medium">Location:</span> {jobData.location}</p>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="sm:justify-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDialog(false);
+                navigate(-1);
+              }}
+            >
+              Return to Dashboard
+            </Button>
+            <Button 
+              onClick={() => {
+                setShowDialog(false);
+                setJobData({
+                  title: "",
+                  category: "IT",
+                  location: "Remote",
+                  max_applicants: 10,
+                  max_positions: 2,
+                  job_type: "full-time",
+                  duration: 12,
+                  salary: 80000,
+                  deadline: ""
+                });
+              }}
+            >
+              Post Another Job
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       <Footer />
     </div>

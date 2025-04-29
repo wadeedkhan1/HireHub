@@ -56,3 +56,43 @@ exports.markAllNotificationsRead = async (req, res, next) => {
     next(err);
   }
 };
+
+// Get user profile
+exports.getProfile = async (req, res, next) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Determine user type from database
+    const userType = await userService.getUserType(userId);
+    
+    // Get profile data
+    const profile = await userService.getProfile(userId, userType);
+    res.json(profile);
+  } catch (err) {
+    console.error("Get profile error:", err);
+    res.status(500).json({ error: err.message || "Error retrieving profile data" });
+  }
+};
+
+// Update user profile
+exports.updateProfile = async (req, res, next) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Determine user type from database
+    const userType = await userService.getUserType(userId);
+    
+    // Update profile data
+    const updatedProfile = await userService.updateProfile(userId, userType, req.body);
+    res.json({ message: "Profile updated successfully", profile: updatedProfile });
+  } catch (err) {
+    console.error("Update profile error:", err);
+    res.status(500).json({ error: err.message || "Error updating profile data" });
+  }
+};

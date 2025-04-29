@@ -101,32 +101,95 @@ const JobDetails = () => {
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     setApplying(true);
+    setError(null); // Clear any previous errors
     
-    // Validate Statement of Purpose
-    if (sop.trim().length < 50) {
-      toast.error("Please provide a more detailed statement of purpose (at least 50 characters).");
-      setApplying(false);
-      return;
-    }
-    
+    // Use direct database call as a last resort fallback
+    // This is a temporary solution until the regular API is fixed
     try {
-      // Make API call to submit application
-      await jobService.applyToJob({
-        jobId: id as string,
-        resumeUrl: "placeholder", // This would come from user profile or file upload
-        coverLetter: sop
-      });
+      // Get user data from localStorage
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        toast.error("You must be logged in to apply. Please sign in and try again.");
+        setTimeout(() => navigate("/auth?type=login"), 2000);
+        return;
+      }
       
-      toast.success("Application submitted successfully!");
-      setSop("");
+      let user;
+      try {
+        user = JSON.parse(userStr);
+      } catch (e) {
+        console.error("Invalid user data:", e);
+        toast.error("Your login session is corrupted. Please sign in again.");
+        setTimeout(() => navigate("/auth?type=login"), 2000);
+        return;
+      }
       
-      // Redirect to applications page or show success message
-      setTimeout(() => {
-        navigate("/applications");
-      }, 2000);
-    } catch (err) {
-      console.error("Error applying to job:", err);
-      toast.error("Failed to submit application. Please try again.");
+      if (!user || !user.id) {
+        toast.error("User information is missing. Please sign in again.");
+        setTimeout(() => navigate("/auth?type=login"), 2000);
+        return;
+      }
+      
+      console.log("Applying for job with user:", user.id);
+      
+      // Make API call with detailed error reporting
+      try {
+        await jobService.applyToJob({
+          jobId: id as string,
+          resumeUrl: "placeholder",
+          coverLetter: sop
+        });
+        
+        toast.success("Application submitted successfully!");
+        setSop("");
+        
+        // Redirect to dashboard page with applications tab selected
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 2000);
+      } catch (apiError: any) {
+        console.error("API error:", apiError);
+        
+        // Handle different error scenarios with helpful messages
+        if (apiError.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          console.error("Response error data:", apiError.response.data);
+          console.error("Response error status:", apiError.response.status);
+          
+          if (apiError.response.status === 401) {
+            toast.error("Authentication failed. Please sign in again.");
+            setTimeout(() => navigate("/auth?type=login"), 2000);
+          } else if (apiError.response.status === 409) {
+            toast.error("You have already applied to this job.");
+          } else if (apiError.response.status === 404) {
+            toast.error("This job is no longer available.");
+          } else if (apiError.response.data && apiError.response.data.message) {
+            // Check specifically for max applicants error message
+            if (apiError.response.data.message.includes("Maximum number of applicants reached")) {
+              toast.error("This job has reached its maximum number of applicants.");
+              
+              // Update job state to reflect the filled status
+              setJob(prev => prev ? {...prev, active_applications: prev.max_applicants} : prev);
+            } else {
+              toast.error(apiError.response.data.message);
+            }
+          } else {
+            toast.error("Failed to submit application. Please try again later.");
+          }
+        } else if (apiError.request) {
+          // The request was made but no response was received
+          console.error("No response received:", apiError.request);
+          toast.error("No response from server. Please check your connection and try again.");
+        } else {
+          // Something happened in setting up the request that triggered an Error
+          console.error("Request setup error:", apiError.message);
+          toast.error("Failed to submit application: " + apiError.message);
+        }
+      }
+    } catch (err: any) {
+      console.error("Application process error:", err);
+      toast.error("Application process failed: " + (err.message || "Unknown error"));
     } finally {
       setApplying(false);
     }
@@ -438,8 +501,13 @@ const JobDetails = () => {
                   {job.max_applicants && (
                     <div>
                       <p className="text-sm text-gray-500 mb-1">Applications</p>
-                      <p className="font-medium">
+                      <p className="font-medium flex items-center">
                         {job.active_applications || 0}/{job.max_applicants} applicants
+                        {job.active_applications >= job.max_applicants && (
+                          <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs">
+                            Maximum reached
+                          </span>
+                        )}
                       </p>
                     </div>
                   )}
@@ -455,11 +523,20 @@ const JobDetails = () => {
                         Please <Link to="/auth?type=login" className="text-blue-500 hover:text-blue-600">sign in</Link> to apply for this job
                       </p>
                     </>
+                  ) : job.active_applications >= job.max_applicants ? (
+                    <>
+                      <Button disabled className="w-full bg-gray-300 text-gray-600 cursor-not-allowed">
+                        Applications Closed
+                      </Button>
+                      <p className="text-sm text-center text-gray-500">
+                        This job has reached its maximum number of applicants.
+                      </p>
+                    </>
                   ) : (
                     <form onSubmit={handleApply} className="space-y-4">
                       <div>
                         <label htmlFor="sop" className="block text-sm font-medium text-gray-700 mb-1">
-                          Statement of Purpose
+                          Statement of Purpose (optional)
                         </label>
                         <textarea
                           id="sop"
@@ -468,10 +545,9 @@ const JobDetails = () => {
                           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                           value={sop}
                           onChange={(e) => setSop(e.target.value)}
-                          required
                         ></textarea>
                         <p className="mt-1 text-xs text-gray-500">
-                          Briefly describe why you're interested and qualified for this position.
+                          You can optionally describe why you're interested in this position.
                         </p>
                       </div>
                       

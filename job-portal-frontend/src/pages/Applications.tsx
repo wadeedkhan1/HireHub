@@ -1,10 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Briefcase, Building, MapPin, Calendar, Search, Filter } from "lucide-react";
+import { Briefcase, Building, MapPin, Calendar, Search, Filter, Trash2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import jobService from "@/services/jobService";
+import { toast } from "sonner";
 
 interface Application {
   id: number;
@@ -20,39 +32,45 @@ const Applications = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] = useState<number | null>(null);
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setApplications([
-        {
-          id: 1,
-          jobTitle: "Senior Frontend Developer",
-          company: "TechCorp Inc.",
-          location: "San Francisco, CA",
-          appliedDate: "2024-03-15",
-          status: "interviewing"
-        },
-        {
-          id: 2,
-          jobTitle: "Product Manager",
-          company: "Innovate Solutions",
-          location: "New York, NY",
-          appliedDate: "2024-03-14",
-          status: "reviewing"
-        },
-        {
-          id: 3,
-          jobTitle: "Backend Developer",
-          company: "DataFlow Systems",
-          location: "Chicago, IL",
-          appliedDate: "2024-03-13",
-          status: "pending"
-        }
-      ]);
+    const fetchApplications = async () => {
+      try {
+        setLoading(true);
+        const response = await jobService.getMyApplications();
+        setApplications(response.data || []);
+      } catch (error) {
+        console.error("Error fetching applications:", error);
+        toast.error("Failed to load your applications");
+      } finally {
       setLoading(false);
-    }, 1000);
+      }
+    };
+
+    fetchApplications();
   }, []);
+
+  const handleDeleteClick = (applicationId: number) => {
+    setApplicationToDelete(applicationId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (applicationToDelete) {
+      try {
+        await jobService.deleteApplication(applicationToDelete.toString());
+        setApplications(applications.filter(app => app.id !== applicationToDelete));
+        toast.success("Application deleted successfully");
+      } catch (error) {
+        console.error("Error deleting application:", error);
+        toast.error("Failed to delete application");
+      }
+    }
+    setDeleteDialogOpen(false);
+    setApplicationToDelete(null);
+  };
 
   const filteredApplications = applications.filter(application => {
     const matchesSearch = application.jobTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -167,9 +185,20 @@ const Applications = () => {
                         </Badge>
                       </td>
                       <td className="py-4 px-4">
+                        <div className="flex space-x-2">
                         <Link to={`/applications/${application.id}`}>
                           <Button variant="outline" size="sm">View Details</Button>
                         </Link>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                            onClick={() => handleDeleteClick(application.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -181,6 +210,23 @@ const Applications = () => {
       </div>
       
       <Footer />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete your application. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

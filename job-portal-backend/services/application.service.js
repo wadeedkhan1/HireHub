@@ -1,58 +1,112 @@
 const { runQuery, callProcedure } = require("../db/query");
 
-exports.applyForJob = async (userId, jobId) => {
-  const [job] = await runQuery("SELECT recruiter_id FROM Jobs WHERE id = ?", [jobId]);
-  if (!job) throw new Error(`Job ${jobId} not found`);
-  
-  const existing = await runQuery(
-    "SELECT id FROM Applications WHERE user_id = ? AND job_id = ?",
-    [userId, jobId]
-  );
-  if (existing.length > 0) {
-    throw new Error(`You've already applied to job #${jobId}`);
-  }
-  
-  // Check if the user exists in JobApplicants
-  const applicantRows = await runQuery(
-    "SELECT user_id FROM JobApplicants WHERE user_id = ?",
-    [userId]
-  );
-  
-  // If the user doesn't exist in JobApplicants, create a default entry
-  if (applicantRows.length === 0) {
-    // Get user info from Users table
-    const userRows = await runQuery(
-      "SELECT email FROM Users WHERE id = ?",
+exports.applyForJob = async (userId, jobId, coverLetter = null) => {
+  try {
+    // Validate inputs
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+    
+    if (!jobId) {
+      throw new Error('Job ID is required');
+    }
+    
+    // Convert jobId to a number if it's a string
+    const jobIdNum = typeof jobId === 'string' ? parseInt(jobId, 10) : jobId;
+    
+    if (isNaN(jobIdNum)) {
+      throw new Error(`Invalid job ID format: ${jobId}`);
+    }
+    
+    console.log(`Applying for job: User=${userId}, Job=${jobIdNum}, Has cover letter=${!!coverLetter}`);
+    
+    // Check if job exists - using the numeric job ID
+    const jobs = await runQuery("SELECT recruiter_id, title FROM Jobs WHERE id = ?", [jobIdNum]);
+    console.log('Job query result:', jobs);
+    
+    if (!jobs || jobs.length === 0) {
+      throw new Error(`Job ${jobIdNum} not found`);
+    }
+    
+    const job = jobs[0];
+    
+    // Check if already applied
+    const existing = await runQuery(
+      "SELECT id FROM Applications WHERE user_id = ? AND job_id = ?",
+      [userId, jobIdNum]
+    );
+    
+    if (existing.length > 0) {
+      throw new Error(`You've already applied to this job`);
+    }
+    
+    // Check if the user exists in JobApplicants
+    const applicantRows = await runQuery(
+      "SELECT user_id FROM JobApplicants WHERE user_id = ?",
       [userId]
     );
     
-    if (userRows.length === 0) {
-      throw new Error(`User with ID ${userId} not found`);
+    // If the user doesn't exist in JobApplicants, create a default entry
+    if (applicantRows.length === 0) {
+      // Get user info from Users table
+      const userRows = await runQuery(
+        "SELECT email FROM Users WHERE id = ?",
+        [userId]
+      );
+      
+      if (userRows.length === 0) {
+        throw new Error(`User with ID ${userId} not found`);
+      }
+      
+      const email = userRows[0].email;
+      const defaultName = email.split('@')[0];
+      
+      console.log(`Creating default applicant profile for user ${userId}`);
+      
+      // Create a default JobApplicant entry
+      await runQuery(
+        "INSERT INTO JobApplicants (user_id, name, skills) VALUES (?, ?, ?)",
+        [userId, defaultName, ""]
+      );
     }
+
+    // Insert the application with cover letter if provided
+    console.log(`Inserting application record: user=${userId}, recruiter=${job.recruiter_id}, job=${jobIdNum}`);
     
-    const email = userRows[0].email;
-    const defaultName = email.split('@')[0];
-    
-    // Create a default JobApplicant entry
-    await runQuery(
-      "INSERT INTO JobApplicants (user_id, name, skills) VALUES (?, ?, ?)",
-      [userId, defaultName, ""]
-    );
+    // Use a single query without the cover_letter field since it doesn't exist in the database
+    let result;
+    try {
+      // Don't include cover_letter in the query as this column doesn't exist in the schema
+      result = await runQuery(
+        `
+        INSERT INTO Applications (user_id, recruiter_id, job_id, status)
+        VALUES (?, ?, ?, 'applied')
+        `,
+        [userId, job.recruiter_id, jobIdNum]
+      );
+      
+      // If a cover letter was provided, we could log it or handle it separately in the future
+      if (coverLetter) {
+        console.log(`Cover letter provided but not stored in database: ${coverLetter.substring(0, 50)}...`);
+      }
+    } catch (dbError) {
+      console.error('Database error during application insertion:', dbError);
+      throw new Error(`Database error: ${dbError.message}`);
+    }
+
+    try {
+      const note = `✅ Application submitted for ${job.title}`;
+      await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [userId, note]);
+    } catch (notificationError) {
+      console.warn('Failed to create notification, but application was submitted:', notificationError);
+      // Don't fail the whole process for a notification error
+    }
+
+    return result;
+  } catch (error) {
+    console.error("Application service error:", error);
+    throw error;
   }
-
-  // Insert the application
-  const result = await runQuery(
-    `
-    INSERT INTO Applications (user_id, recruiter_id, job_id, status)
-    VALUES (?, ?, ?, 'applied')
-    `,
-    [userId, job.recruiter_id, jobId]
-  );
-
-  const note = `✅ Application submitted for job #${jobId}`;
-  await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [userId, note]);
-
-  return result;
 };
 
 exports.updateStatus = async (applicationId, newStatus) => {
@@ -61,12 +115,17 @@ exports.updateStatus = async (applicationId, newStatus) => {
     newStatus
   ]);
 
+  // Get application details including job title
   const [appRow] = await runQuery(
-    "SELECT user_id FROM Applications WHERE id = ?",
+    `SELECT a.user_id, j.title AS job_title
+     FROM Applications a
+     JOIN Jobs j ON a.job_id = j.id
+     WHERE a.id = ?`,
     [applicationId]
   );
+  
   if (appRow) {
-    const note = `📢 Your application #${applicationId} is now "${newStatus}"`;
+    const note = `📢 Your application for "${appRow.job_title}" is now "${newStatus}"`;
     await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [
       appRow.user_id,
       note
@@ -79,9 +138,17 @@ exports.updateStatus = async (applicationId, newStatus) => {
 exports.getApplicationsByUser = async (userId) => {
   return await runQuery(
     `
-    SELECT a.id AS application_id, j.title, a.status, a.date_of_application
+    SELECT 
+      a.id AS application_id, 
+      j.title AS job_title, 
+      r.name AS company_name,
+      j.location,
+      j.deadline,
+      a.status, 
+      a.date_of_application
     FROM Applications a
     JOIN Jobs j ON j.id = a.job_id
+    JOIN Recruiters r ON j.recruiter_id = r.id
     WHERE a.user_id = ?
     ORDER BY a.date_of_application DESC
     `,
@@ -101,4 +168,152 @@ exports.getApplicationsByRecruiter = async (recruiterId) => {
     `,
     [recruiterId]
   );
+};
+
+exports.getApplicationDetails = async (applicationId) => {
+  try {
+    console.log(`Getting details for application ${applicationId}`);
+    
+    // First get the basic application info
+    const [application] = await runQuery(
+      `
+      SELECT 
+        a.id AS application_id,
+        a.user_id,
+        a.job_id,
+        a.status,
+        a.date_of_application,
+        ja.name,
+        j.title AS job_title,
+        j.location AS job_location
+      FROM Applications a
+      JOIN JobApplicants ja ON a.user_id = ja.user_id
+      JOIN Jobs j ON a.job_id = j.id
+      WHERE a.id = ?
+      `,
+      [applicationId]
+    );
+
+    if (!application) {
+      console.error(`Application ${applicationId} not found`);
+      throw new Error("Application not found");
+    }
+
+    // Get additional applicant details
+    const [applicantDetails] = await runQuery(
+      `
+      SELECT 
+        ja.skills,
+        ja.resume,
+        ja.profile,
+        u.email
+      FROM JobApplicants ja
+      JOIN Users u ON ja.user_id = u.id
+      WHERE ja.user_id = ?
+      `,
+      [application.user_id]
+    );
+
+    if (applicantDetails) {
+      // Merge applicant details with application
+      Object.assign(application, applicantDetails);
+      
+      // Parse skills if they exist
+      if (application.skills) {
+        try {
+          // If skills are stored as JSON string, parse them
+          if (application.skills.startsWith('[')) {
+            application.skills = JSON.parse(application.skills);
+          } 
+          // If skills are stored as comma-separated string, split them
+          else {
+            application.skills = application.skills.split(',').map(skill => skill.trim()).filter(Boolean);
+          }
+        } catch (e) {
+          console.warn('Failed to parse skills:', e);
+          application.skills = [application.skills]; // Fallback to treating it as a single skill
+        }
+      } else {
+        application.skills = [];
+      }
+    }
+
+    // Get education history if it exists
+    try {
+      const education = await runQuery(
+        `
+        SELECT 
+          e.id,
+          e.institution_name AS institution,
+          e.field,
+          e.start_year,
+          e.end_year,
+          CONCAT(e.start_year, ' - ', IFNULL(e.end_year, 'Present')) AS duration
+        FROM Education e
+        JOIN JobApplicants ja ON e.applicant_id = ja.id
+        WHERE ja.user_id = ?
+        ORDER BY e.start_year DESC
+        `,
+        [application.user_id]
+      );
+      
+      if (education && education.length > 0) {
+        // Add education data without overriding the field value
+        application.education = education.map(edu => ({
+          ...edu
+        }));
+      }
+    } catch (eduError) {
+      console.warn('Failed to fetch education data:', eduError);
+      console.error(eduError);
+    }
+
+    console.log(`Successfully retrieved details for application ${applicationId}`);
+    return application;
+  } catch (error) {
+    console.error(`Error getting application details for ID ${applicationId}:`, error.message);
+    if (error.sql) {
+      console.error("SQL query:", error.sql);
+    }
+    throw error;
+  }
+};
+
+exports.getApplicationsByJob = async (jobId) => {
+  try {
+    console.log(`Getting applications for job ${jobId} - starting database query`);
+    
+    // First check if the job exists
+    const jobs = await runQuery("SELECT id FROM Jobs WHERE id = ?", [jobId]);
+    if (!jobs || jobs.length === 0) {
+      console.error(`Job with ID ${jobId} not found`);
+      throw new Error(`Job with ID ${jobId} not found`);
+    }
+    
+    // Use a simplified query with only columns we know exist
+    const result = await runQuery(
+      `
+      SELECT 
+        a.id AS application_id, 
+        a.user_id,
+        a.status, 
+        a.date_of_application,
+        ja.name
+      FROM Applications a
+      JOIN JobApplicants ja ON a.user_id = ja.user_id
+      WHERE a.job_id = ?
+      ORDER BY a.date_of_application DESC
+      `,
+      [jobId]
+    );
+    
+    console.log(`Successfully retrieved ${result.length} applications for job ${jobId}`);
+    return result;
+  } catch (error) {
+    console.error(`Error getting applications for job ${jobId}:`, error.message);
+    if (error.sql) {
+      console.error("SQL query:", error.sql);
+    }
+    throw error;
+  }
 };

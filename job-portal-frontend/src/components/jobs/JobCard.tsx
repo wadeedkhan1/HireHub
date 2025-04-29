@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { CalendarIcon, MapPin, Clock, DollarSign, Briefcase, Tag, Timer, Users, AlertCircle } from "lucide-react";
+import { CalendarIcon, MapPin, Clock, DollarSign, Briefcase, Tag, Timer, Users, AlertCircle, Building } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export interface JobData {
@@ -20,6 +20,8 @@ export interface JobData {
   description?: string;
   active_applications?: number;
   accepted_candidates?: number;
+  company?: string;
+  total_applicants?: number;
 }
 
 interface JobCardProps {
@@ -40,7 +42,9 @@ const JobCard = ({ job, compact = false }: JobCardProps) => {
     max_applicants,
     date_of_posting,
     deadline,
-    skills 
+    skills,
+    company,
+    total_applicants
   } = job;
   
   // Format the date
@@ -110,6 +114,13 @@ const JobCard = ({ job, compact = false }: JobCardProps) => {
               </h3>
             </Link>
             
+            {company && (
+              <div className="flex items-center mt-1.5 text-gray-600 text-sm">
+                <Building className="h-3.5 w-3.5 mr-1" />
+                <span>{company}</span>
+              </div>
+            )}
+            
             {date_of_posting && (
               <div className="flex items-center mt-1.5 text-gray-500 text-xs">
                 <CalendarIcon className="h-3 w-3 mr-1" />
@@ -151,6 +162,13 @@ const JobCard = ({ job, compact = false }: JobCardProps) => {
             <div className="flex items-center text-gray-700">
               <Timer className="h-4 w-4 mr-1.5 text-blue-500 flex-shrink-0" />
               <span className="text-sm">{duration} month{duration !== 1 ? 's' : ''}</span>
+            </div>
+          )}
+
+          {total_applicants !== undefined && (
+            <div className="flex items-center text-gray-700">
+              <Users className="h-4 w-4 mr-1.5 text-blue-500 flex-shrink-0" />
+              <span className="text-sm">{total_applicants} Applicant{total_applicants !== 1 ? 's' : ''}</span>
             </div>
           )}
         </div>

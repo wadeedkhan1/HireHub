@@ -4,17 +4,13 @@ const applicationController = require("../controllers/application.controller");
 
 // Applicant actions
 router.post("/jobs/:jobId/apply", applicationController.applyForJob);
-router.patch("/:applicationId/cancel", applicationController.cancelApplication);
-router.get("/user/:userId", applicationController.getApplicationsByUser);
+router.get("/:applicationId", applicationController.getApplicationDetails);
+router.put("/:applicationId/status", applicationController.updateApplicationStatus);
+router.delete("/:applicationId", applicationController.cancelApplication);
 
-// Recruiter actions
-router.patch(
-  "/:applicationId/status",
-  applicationController.updateApplicationStatus
-);
-router.get(
-  "/recruiter/:recruiterId",
-  applicationController.getApplicationsByRecruiter
-);
+// Get applications by user or recruiter
+router.get("/user/:userId", applicationController.getApplicationsByUser);
+router.get("/recruiter/:recruiterId", applicationController.getApplicationsByRecruiter);
+router.get("/jobs/:jobId", applicationController.getApplicationsByJob);
 
 module.exports = router;

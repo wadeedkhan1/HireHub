@@ -111,12 +111,57 @@ const jobService = {
 
   // For employers: Get all applications for a specific job
   getJobApplications: async (jobId: string) => {
-    return api.get(`/jobs/${jobId}/applications`);
+    return api.get(`/applications/jobs/${jobId}`);
   },
 
   // For jobseekers: Apply to a job
   applyToJob: async (applicationData: JobApplication) => {
-    return api.post(`/jobs/${applicationData.jobId}/apply`, applicationData);
+    try {
+      // Get user from localStorage as a proper object
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        throw new Error('User not authenticated. Please sign in.');
+      }
+
+      let currentUser;
+      try {
+        currentUser = JSON.parse(userStr);
+      } catch (e) {
+        console.error('Failed to parse user data:', e);
+        throw new Error('Invalid user data. Please sign in again.');
+      }
+
+      if (!currentUser.id) {
+        console.error('Missing user ID in stored data:', currentUser);
+        throw new Error('User ID not found. Please sign in again.');
+      }
+
+      console.log('Applying with user ID:', currentUser.id);
+      
+      // Create a properly formatted request body
+      const requestData = {
+        user_id: currentUser.id,
+        jobId: applicationData.jobId,
+        resumeUrl: applicationData.resumeUrl || "placeholder",
+        coverLetter: applicationData.coverLetter || ""
+      };
+      
+      // Make the API call with detailed error handling
+      try {
+        // The correct endpoint is /applications/jobs/:jobId/apply based on the backend route
+        const response = await api.post(`/applications/jobs/${applicationData.jobId}/apply`, requestData);
+        return response;
+      } catch (error: any) {
+        console.error('Application API error:', error);
+        if (error.response?.status === 401) {
+          throw new Error('Authorization failed. Please sign in again.');
+        }
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('Application process error:', error);
+      throw error;
+    }
   },
 
   // For jobseekers: Get all jobs applied to
@@ -130,8 +175,18 @@ const jobService = {
   },
   
   // For employers: Change application status
-  updateApplicationStatus: async (applicationId: string, status: 'pending' | 'reviewing' | 'rejected' | 'accepted') => {
+  updateApplicationStatus: async (applicationId: string, status: string) => {
     return api.put(`/applications/${applicationId}/status`, { status });
+  },
+
+  // Get detailed information about a specific application
+  getApplicationDetails: async (applicationId: string) => {
+    return api.get(`/applications/${applicationId}`);
+  },
+
+  // For applicants: Delete/cancel an application
+  deleteApplication: async (applicationId: string) => {
+    return api.delete(`/applications/${applicationId}`);
   }
 };
 

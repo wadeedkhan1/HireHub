@@ -32,11 +32,12 @@ CREATE TABLE Education (
     id INT AUTO_INCREMENT PRIMARY KEY,
     applicant_id INT NOT NULL,
     institution_name VARCHAR(255) NOT NULL,
+    field VARCHAR(255) DEFAULT 'Not Specified',
     start_year YEAR NOT NULL CHECK (start_year >= 1930),
     end_year YEAR,
     FOREIGN KEY (applicant_id) REFERENCES JobApplicants(id) ON DELETE CASCADE,
     CHECK (end_year >= start_year)
-)
+);
 
 CREATE TABLE Jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,

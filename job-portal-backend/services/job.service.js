@@ -36,6 +36,14 @@ exports.searchJobs = async (filters) => {
 exports.postJob = async (recruiterId, data) => {
   const { title, category, location, max_applicants, max_positions, job_type, duration, salary, deadline } = data;
 
+  // First, we need to get the recruiter_id from the Recruiters table using the user_id
+  const recruiters = await runQuery("SELECT id FROM Recruiters WHERE user_id = ?", [recruiterId]);
+  
+  if (!recruiters || recruiters.length === 0) {
+    throw new Error("Recruiter profile not found. Please complete your profile setup first.");
+  }
+  
+  const actualRecruiterId = recruiters[0].id;
   
   const query = `
     INSERT INTO Jobs (recruiter_id, title, category, location, max_applicants, max_positions, job_type, duration, salary, deadline)
@@ -43,7 +51,7 @@ exports.postJob = async (recruiterId, data) => {
   `;
 
   const params = [
-    recruiterId,
+    actualRecruiterId,
     title,
     category,
     location,

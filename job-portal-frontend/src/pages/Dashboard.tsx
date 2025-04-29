@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { 
@@ -15,7 +14,8 @@ import {
   Building,
   CalendarDays,
   Bookmark,
-  MapPin
+  MapPin,
+  DollarSign
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,14 @@ import DashboardStats from "@/components/dashboard/DashboardStats";
 import JobCard, { JobData } from "@/components/jobs/JobCard";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import dashboardService, { 
+  RecruiterDashboardData, 
+  ApplicantDashboardData,
+  isRecruiterDashboard,
+  isApplicantDashboard
+} from "@/services/dashboardService";
+import authService from "@/services/authService";
+import { toast } from "sonner";
 
 interface Notification {
   id: number;
@@ -37,8 +45,8 @@ interface Application {
   jobTitle: string;
   company: string;
   appliedDate: string;
-  status: "pending" | "interviewing" | "accepted" | "rejected";
-  deadline: string;
+  status: string;
+  deadline?: string;
 }
 
 interface Applicant {
@@ -46,192 +54,182 @@ interface Applicant {
   name: string;
   appliedDate: string;
   jobTitle: string;
-  status: "pending" | "interviewing" | "accepted" | "rejected";
+  status: string;
+}
+
+interface RecentJob {
+  id: number;
+  title: string;
+  category?: string;
+  location: string;
+  salary?: number;
+  date_of_posting?: string;
 }
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [userType, setUserType] = useState<"jobseeker" | "recruiter" | null>(null);
+  const [userType, setUserType] = useState<"applicant" | "recruiter" | null>(null);
+  const [userId, setUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Mock data
+  // Dashboard data
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [applicants, setApplicants] = useState<Applicant[]>([]);
-  const [savedJobs, setSavedJobs] = useState<JobData[]>([]);
+  const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
   const [postedJobs, setPostedJobs] = useState<JobData[]>([]);
+  const [recruiterDashboard, setRecruiterDashboard] = useState<RecruiterDashboardData | null>(null);
+  const [applicantDashboard, setApplicantDashboard] = useState<ApplicantDashboardData | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
   
-  // Check authentication
+  // Check authentication and load dashboard data
   useEffect(() => {
-    // Get user from localStorage (will be replaced with proper auth)
-    const userJson = localStorage.getItem("user");
+    const getCurrentUser = async () => {
+      try {
+        const user = authService.getCurrentUser();
     
-    if (!userJson) {
-      // Redirect to login if not logged in
+        if (!user) {
       navigate("/auth?type=login");
       return;
     }
     
-    try {
-      const user = JSON.parse(userJson);
-      setUserType(user.userType || "jobseeker");
-      
-      // Load mock data
-      setTimeout(() => {
-        // Mock notifications
-        setNotifications([
-          {
-            id: 1,
-            message: "Your application for Frontend Developer at TechCorp has been viewed",
-            time: "2 hours ago",
-            read: false
-          },
-          {
-            id: 2,
-            message: "New job matching your profile: UX Designer at DesignHub",
-            time: "1 day ago",
-            read: false
-          },
-          {
-            id: 3,
-            message: "You've been invited to interview for Senior Frontend Developer at TechCorp",
-            time: "2 days ago",
-            read: true
-          }
-        ]);
+        console.log("Current user:", user);
+        setUserType(user.type);
+        setUserId(user.id);
         
-        // Mock applications
-        setApplications([
-          {
-            id: 1,
-            jobTitle: "Senior Frontend Developer",
-            company: "TechCorp Inc.",
-            appliedDate: "2025-04-05",
-            status: "interviewing",
-            deadline: "2025-06-15"
-          },
-          {
-            id: 2,
-            jobTitle: "UX/UI Designer",
-            company: "DesignHub",
-            appliedDate: "2025-04-02",
-            status: "pending",
-            deadline: "2025-06-25"
-          },
-          {
-            id: 3,
-            jobTitle: "Full Stack Developer",
-            company: "WebWizards",
-            appliedDate: "2025-03-28",
-            status: "rejected",
-            deadline: "2025-05-30"
-          },
-          {
-            id: 4,
-            jobTitle: "React Developer",
-            company: "AppMatrix",
-            appliedDate: "2025-03-25",
-            status: "accepted",
-            deadline: "2025-05-20"
+        // Load dashboard data based on user type
+        try {
+          setLoading(true);
+          const dashboardData = await dashboardService.getDashboard(user.id, user.type);
+          console.log("Dashboard data:", dashboardData);
+          
+          if (user.type === "recruiter" && isRecruiterDashboard(dashboardData)) {
+            setRecruiterDashboard(dashboardData);
+            
+            // Convert the backend data to our format
+            const formattedJobs: JobData[] = dashboardData.jobsWithApplicantCount.map(job => ({
+              id: job.job_id,
+              title: job.title,
+              total_applicants: job.total_applicants,
+              job_type: "Full-Time", // Default values
+              deadline: "N/A",
+              location: "N/A"
+            }));
+            setPostedJobs(formattedJobs);
+            
+            if (dashboardData.recentApplications) {
+              const formattedApplicants: Applicant[] = dashboardData.recentApplications.map(app => ({
+                id: app.application_id,
+                name: app.applicant_name,
+                appliedDate: app.date_of_application,
+                jobTitle: app.job_title || "Applied Job",
+                status: app.status
+              }));
+              setApplicants(formattedApplicants);
+            }
+            
+            // Set dashboard stats for the recruiter
+            setDashboardStats({
+              totalJobs: dashboardData.jobsWithApplicantCount.length || 0,
+              totalApplicants: dashboardData.jobsWithApplicantCount.reduce((acc, job) => acc + job.total_applicants, 0) || 0,
+              newApplicants: dashboardData.recentApplications?.length || 0,
+              rating: 4.5 // Default rating
+            });
+            
+            // Set notifications if available
+            if (dashboardData.notifications && dashboardData.notifications.length > 0) {
+              const formattedNotifications: Notification[] = dashboardData.notifications.map((notif, index) => ({
+                id: notif.notification_id || index,
+                message: notif.message,
+                time: notif.time_ago || notif.created_at || new Date().toISOString(),
+                read: notif.read || notif.is_read === 1 || false
+              }));
+              setNotifications(formattedNotifications);
+            }
+          } else if (user.type === "applicant" && isApplicantDashboard(dashboardData)) {
+            // Applicant dashboard - Use the real API data
+            setApplicantDashboard(dashboardData);
+            
+            // Convert the backend data to our format - prefer myApplications over recentApplications
+            const applicationsData = dashboardData.myApplications || dashboardData.recentApplications || [];
+            const formattedApplications: Application[] = applicationsData.map(app => ({
+                id: app.application_id,
+                jobTitle: app.job_title,
+              company: app.company_name || "Company",
+                appliedDate: app.date_of_application,
+                status: app.status,
+              deadline: app.deadline
+              }));
+              setApplications(formattedApplications);
+            
+            // Handle recent jobs (new format)
+            if (dashboardData.recentJobs && dashboardData.recentJobs.length > 0) {
+              const formattedRecentJobs: RecentJob[] = dashboardData.recentJobs.map(job => ({
+                id: job.job_id,
+                title: job.title,
+                category: job.category || "",
+                location: job.location || "Remote",
+                salary: job.salary,
+                date_of_posting: job.date_of_posting
+              }));
+              setRecentJobs(formattedRecentJobs);
+            } else if (dashboardData.savedJobs && dashboardData.savedJobs.length > 0) {
+              // Fallback to saved jobs if recentJobs not available
+              const formattedSavedJobs: RecentJob[] = dashboardData.savedJobs.map(job => ({
+              id: job.job_id,
+              title: job.title,
+              location: job.location || "Remote",
+                date_of_posting: job.deadline
+            }));
+              setRecentJobs(formattedSavedJobs);
+            } else {
+              setRecentJobs([]);
+            }
+            
+            // Set dashboard stats for the applicant based on available data
+            setDashboardStats({
+              totalApplications: applicationsData.length || 0,
+              pendingApplications: applicationsData.filter(app => app.status === "applied" || app.status === "pending").length || 0,
+              interviewApplications: applicationsData.filter(app => app.status === "interviewing" || app.status === "shortlisted").length || 0,
+              rejectedApplications: applicationsData.filter(app => app.status === "rejected").length || 0
+            });
+            
+            // Set notifications from the dashboard data if available
+            if (dashboardData.notifications && dashboardData.notifications.length > 0) {
+              const formattedNotifications: Notification[] = dashboardData.notifications.map((notif, index) => ({
+                id: (notif as any).notification_id || index,
+                message: notif.message,
+                time: (notif as any).time_ago || notif.created_at || new Date().toISOString(),
+                read: (notif as any).read || notif.is_read === 1 || false
+              }));
+              setNotifications(formattedNotifications);
+            } else {
+              setNotifications([]);
+            }
           }
-        ]);
-        
-        // Mock applicants for recruiters
-        setApplicants([
-          {
-            id: 1,
-            name: "Jane Smith",
-            appliedDate: "2025-04-05",
-            jobTitle: "Senior Frontend Developer",
-            status: "pending"
-          },
-          {
-            id: 2,
-            name: "Mike Johnson",
-            appliedDate: "2025-04-02",
-            jobTitle: "Senior Frontend Developer",
-            status: "interviewing"
-          },
-          {
-            id: 3,
-            name: "Sarah Williams",
-            appliedDate: "2025-03-30",
-            jobTitle: "UX Designer",
-            status: "rejected"
-          },
-          {
-            id: 4,
-            name: "David Lee",
-            appliedDate: "2025-03-28",
-            jobTitle: "Backend Developer",
-            status: "accepted"
-          },
-          {
-            id: 5,
-            name: "Emily Chen",
-            appliedDate: "2025-04-06",
-            jobTitle: "UX Designer",
-            status: "pending"
+        } catch (error) {
+          console.error("Error loading dashboard data:", error);
+          toast.error("Failed to load dashboard data. Please try again.");
+          
+          // Set empty data
+          if (user.type === "recruiter") {
+            setPostedJobs([]);
+            setApplicants([]);
+          } else {
+            setApplications([]);
+            setRecentJobs([]);
           }
-        ]);
-        
-        // Mock saved jobs
-        setSavedJobs([
-          {
-            id: 1,
-            title: "Senior Frontend Developer",
-            company: "TechCorp Inc.",
-            location: "San Francisco, CA",
-            salary: "$120,000 - $150,000",
-            job_type: "Full-Time",
-            deadline: "2025-06-15"
-          },
-          {
-            id: 3,
-            title: "UX/UI Designer",
-            company: "DesignHub",
-            location: "Remote",
-            salary: "$90,000 - $120,000",
-            job_type: "Full-Time",
-            deadline: "2025-06-25"
-          }
-        ]);
-        
-        // Mock posted jobs for recruiters
-        setPostedJobs([
-          {
-            id: 1,
-            title: "Senior Frontend Developer",
-            company: "TechCorp Inc.",
-            location: "San Francisco, CA",
-            job_type: "Full-Time",
-            deadline: "2025-06-15",
-          },
-          {
-            id: 2,
-            title: "UX Designer",
-            company: "TechCorp Inc.",
-            location: "San Francisco, CA",
-            job_type: "Full-Time",
-            deadline: "2025-07-01",
-          },
-          {
-            id: 3,
-            title: "Backend Developer",
-            company: "TechCorp Inc.",
-            location: "Remote",
-            job_type: "Full-Time",
-            deadline: "2025-06-20",
-          }
-        ]);
-        
+          setNotifications([]);
+        } finally {
         setLoading(false);
-      }, 1000);
-      
+        }
     } catch (error) {
-      console.error("Error loading dashboard data:", error);
+        console.error("Authentication error:", error);
       navigate("/auth?type=login");
     }
+    };
+
+    getCurrentUser();
   }, [navigate]);
   
   // Mark all notifications as read
@@ -241,6 +239,7 @@ const Dashboard = () => {
   
   // Format date
   const formatDate = (dateString: string) => {
+    if (!dateString) return "N/A";
     const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
@@ -249,15 +248,17 @@ const Dashboard = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
-        return "bg-amber-100 text-amber-800 border-0";
+      case "applied":
+        return "bg-blue-100 text-blue-800";
       case "interviewing":
-        return "bg-blue-100 text-blue-800 border-0";
+      case "shortlisted":
+        return "bg-amber-100 text-amber-800";
       case "accepted":
-        return "bg-green-100 text-green-800 border-0";
+        return "bg-green-100 text-green-800";
       case "rejected":
-        return "bg-red-100 text-red-800 border-0";
+        return "bg-red-100 text-red-800";
       default:
-        return "bg-gray-100 text-gray-800 border-0";
+        return "bg-gray-100 text-gray-800";
     }
   };
   
@@ -265,24 +266,29 @@ const Dashboard = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "pending":
+      case "applied":
         return <Clock className="h-4 w-4" />;
       case "interviewing":
-        return <CalendarDays className="h-4 w-4" />;
+      case "shortlisted":
+        return <User className="h-4 w-4" />;
       case "accepted":
         return <CheckCircle className="h-4 w-4" />;
       case "rejected":
         return <XCircle className="h-4 w-4" />;
       default:
-        return null;
+        return <Clock className="h-4 w-4" />;
     }
   };
   
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-screen flex flex-col bg-gray-50">
         <Navbar />
         <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          <div className="flex flex-col items-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            <p className="text-gray-500">Loading dashboard...</p>
+          </div>
         </div>
         <Footer />
       </div>
@@ -290,675 +296,369 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       <Navbar />
       
-      <div className="flex-1 bg-gray-50">
-        <div className="container-custom py-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
+      <main className="flex-1 py-10">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <header className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+            <p className="mt-2 text-lg text-gray-600">
+              {userType === "applicant" 
+                ? "View your applications and recent job opportunities" 
+                : "Manage your job postings and applicants"}
+            </p>
+          </header>
           
-          <DashboardStats userType={userType || "jobseeker"} />
+          <DashboardStats userType={userType || "applicant"} stats={dashboardStats} />
           
-          <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid grid-cols-3 md:grid-cols-5 mb-6">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="notifications">
-                Notifications
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <span className="ml-1.5 inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary text-xs text-white">
-                    {notifications.filter(n => !n.read).length}
-                  </span>
-                )}
-              </TabsTrigger>
-              {userType === "jobseeker" ? (
-                <>
-                  <TabsTrigger value="applications">Applications</TabsTrigger>
-                  <TabsTrigger value="saved-jobs">Saved Jobs</TabsTrigger>
-                </>
-              ) : (
-                <>
-                  <TabsTrigger value="applicants">Applicants</TabsTrigger>
-                  <TabsTrigger value="posted-jobs">Posted Jobs</TabsTrigger>
-                </>
-              )}
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Content - 2/3 width on large screens */}
+            <div className="lg:col-span-2 space-y-6">
+              {userType === "applicant" ? (
+                // Applicant View
+                <Tabs defaultValue="applications" className="w-full">
+                  <TabsList className="mb-6">
+                    <TabsTrigger value="applications">My Applications</TabsTrigger>
+                    <TabsTrigger value="recentJobs">Recent Jobs</TabsTrigger>
             </TabsList>
             
-            {/* Overview Tab */}
-            <TabsContent value="overview">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                  {userType === "jobseeker" ? (
-                    <>
-                      <div className="bg-white rounded-lg shadow-sm border p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-lg font-bold text-gray-900">Recent Applications</h2>
-                          <Link to="/applications" className="text-primary text-sm font-medium hover:text-primary/80">
-                            View All
+                  <TabsContent value="applications" className="space-y-4">
+                    <div className="bg-white rounded-lg border shadow-sm">
+                      <div className="px-6 py-4 border-b">
+                        <h3 className="font-semibold text-lg">Recent Applications</h3>
+                      </div>
+                      
+                      <div className="divide-y">
+                        {applications.length === 0 ? (
+                          <div className="px-6 py-8 text-center">
+                            <p className="text-gray-500 mb-4">You haven't applied to any jobs yet.</p>
+                            <Link to="/jobs">
+                              <Button variant="outline">Browse Jobs</Button>
                           </Link>
+                          </div>
+                        ) : (
+                          applications.map((application) => (
+                            <div key={application.id} className="p-6 hover:bg-gray-50">
+                              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                                <div className="mb-4 md:mb-0">
+                                  <Link 
+                                    to={`/jobs/${application.id}`}
+                                    className="text-lg font-medium text-blue-600 hover:text-blue-800"
+                                  >
+                                    {application.jobTitle}
+                                  </Link>
+                                  <div className="flex items-center mt-1 text-gray-600">
+                                    <Building className="h-4 w-4 mr-1" />
+                                    <span className="text-sm">{application.company}</span>
+                                  </div>
+                                  <div className="mt-2 flex items-center space-x-4">
+                                    <div className="flex items-center text-sm text-gray-500">
+                                      <CalendarDays className="h-4 w-4 mr-1" />
+                                      Applied {formatDate(application.appliedDate)}
+                                    </div>
+                                    {application.deadline && (
+                                    <div className="flex items-center text-sm text-gray-500">
+                                      <Clock className="h-4 w-4 mr-1" />
+                                      Closes {formatDate(application.deadline)}
+                                    </div>
+                                    )}
+                                  </div>
                         </div>
                         
-                        <div className="space-y-4">
-                          {applications.slice(0, 3).map((application) => (
-                            <div key={application.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
                               <div className="flex items-center">
-                                <Building className="h-10 w-10 text-gray-400 mr-3" />
-                                <div>
-                                  <h3 className="font-medium">{application.jobTitle}</h3>
-                                  <p className="text-sm text-gray-500">{application.company}</p>
+                                  <Badge className={`flex items-center space-x-1 ${getStatusColor(application.status)}`}>
+                                    {getStatusIcon(application.status)}
+                                    <span className="capitalize">
+                                      {application.status === "interviewing" ? "Interview" : application.status}
+                                    </span>
+                                  </Badge>
+                                  <Link to={`/applications/${application.id}`} className="ml-4 text-gray-500 hover:text-gray-700">
+                                    <ChevronRight className="h-5 w-5" />
+                                  </Link>
                                 </div>
                               </div>
-                              <div className="flex flex-col items-end">
-                                <Badge className={getStatusColor(application.status)}>
-                                  {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-                                </Badge>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Applied on {formatDate(application.appliedDate)}
-                                </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                        </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="recentJobs" className="space-y-4">
+                    <div className="bg-white rounded-lg border shadow-sm">
+                      <div className="px-6 py-4 border-b">
+                        <h3 className="font-semibold text-lg">Recent Job Opportunities</h3>
+                      </div>
+                      
+                      {recentJobs.length === 0 ? (
+                        <div className="px-6 py-8 text-center">
+                          <p className="text-gray-500 mb-4">No recent job listings available.</p>
+                          <Link to="/jobs">
+                            <Button variant="outline">Browse All Jobs</Button>
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 p-6 gap-4">
+                          {recentJobs.map((job) => (
+                            <div key={job.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                              <h4 className="font-medium text-blue-600 hover:text-blue-800">
+                                <Link to={`/jobs/${job.id}`}>{job.title}</Link>
+                              </h4>
+                              
+                              <div className="mt-2 space-y-1 text-sm text-gray-600">
+                                {job.category && (
+                                <div className="flex items-center">
+                                    <Briefcase className="h-3.5 w-3.5 mr-1" />
+                                    <span>{job.category}</span>
+                        </div>
+                                )}
+                              <div className="flex items-center">
+                                  <MapPin className="h-3.5 w-3.5 mr-1" />
+                                  <span>{job.location}</span>
+                                </div>
+                                {job.salary && (
+                                <div className="flex items-center">
+                                    <DollarSign className="h-3.5 w-3.5 mr-1" />
+                                    <span>${job.salary.toLocaleString()}/year</span>
+                                </div>
+                                )}
+                              </div>
+                              
+                              <div className="mt-4 flex justify-between items-center">
+                                <span className="text-xs text-gray-500">
+                                  Posted {formatDate(job.date_of_posting || "")}
+                                </span>
+                                <Link to={`/jobs/${job.id}`}>
+                                <Button size="sm" className="px-3">Apply Now</Button>
+                                </Link>
                               </div>
                             </div>
                           ))}
                         </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                // Recruiter View
+                <Tabs defaultValue="jobs" className="w-full">
+                  <TabsList className="mb-6">
+                    <TabsTrigger value="jobs">My Job Postings</TabsTrigger>
+                    <TabsTrigger value="applicants">Recent Applicants</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="jobs" className="space-y-4">
+                    <div className="bg-white rounded-lg border shadow-sm">
+                      <div className="px-6 py-4 border-b flex justify-between items-center">
+                        <h3 className="font-semibold text-lg">Active Job Postings</h3>
+                        <Link to="/post-job">
+                          <Button size="sm">Post New Job</Button>
+                        </Link>
                       </div>
                       
-                      <div className="bg-white rounded-lg shadow-sm border p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-lg font-bold text-gray-900">Recommended Jobs</h2>
-                          <Link to="/jobs" className="text-primary text-sm font-medium hover:text-primary/80">
-                            View More
+                      <div className="divide-y">
+                        {postedJobs.length === 0 ? (
+                          <div className="px-6 py-8 text-center">
+                            <p className="text-gray-500 mb-4">You haven't posted any jobs yet.</p>
+                            <Link to="/post-job">
+                              <Button variant="outline">Post Your First Job</Button>
                           </Link>
+                          </div>
+                        ) : (
+                          postedJobs.map((job) => (
+                            <div key={job.id} className="p-6 hover:bg-gray-50">
+                              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                                <div className="mb-4 md:mb-0">
+                                  <Link 
+                                    to={`/jobs/${job.id}`}
+                                    className="text-lg font-medium text-blue-600 hover:text-blue-800"
+                                  >
+                                    {job.title}
+                                  </Link>
+                                  <div className="flex flex-wrap items-center mt-1 space-x-4">
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      <MapPin className="h-4 w-4 mr-1" />
+                                      <span>{job.location || "N/A"}</span>
+                                    </div>
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      <Briefcase className="h-4 w-4 mr-1" />
+                                      <span>{job.job_type}</span>
+                                    </div>
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      <Users className="h-4 w-4 mr-1" />
+                                      <span>{job.total_applicants || 0} Applicants</span>
+                                    </div>
+                                  </div>
                         </div>
                         
-                        <div className="space-y-4">
-                          <JobCard
-                            job={{
-                              id: 5,
-                              title: "React Developer",
-                              company: "AppMatrix",
-                              location: "Remote",
-                              salary: "$100,000 - $130,000",
-                              job_type: "Full-Time",
-                              deadline: "2025-07-15"
-                            }}
-                            compact
-                          />
-                          <JobCard
-                            job={{
-                              id: 6,
-                              title: "Frontend Lead",
-                              company: "WebSolutions",
-                              location: "New York, NY",
-                              salary: "$140,000 - $160,000",
-                              job_type: "Full-Time",
-                              deadline: "2025-06-30"
-                            }}
-                            compact
-                          />
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="bg-white rounded-lg shadow-sm border p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-lg font-bold text-gray-900">Recent Applicants</h2>
-                          <Link to="/applicants" className="text-primary text-sm font-medium hover:text-primary/80">
-                            View All
-                          </Link>
-                        </div>
-                        
-                        <div className="space-y-4">
-                          {applicants.slice(0, 3).map((applicant) => (
-                            <div key={applicant.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                              <div className="flex items-center">
-                                <div className="bg-gray-200 rounded-full p-2.5 mr-3">
-                                  <User className="h-5 w-5 text-gray-500" />
+                                <div className="flex items-center space-x-2">
+                                  <Link to={`/job-applicants/${job.id}`}>
+                                    <Button variant="outline" size="sm">
+                                      View Applicants
+                                    </Button>
+                                  </Link>
                                 </div>
-                                <div>
-                                  <h3 className="font-medium">{applicant.name}</h3>
-                                  <p className="text-sm text-gray-500">Applied for {applicant.jobTitle}</p>
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end">
-                                <Badge className={getStatusColor(applicant.status)}>
-                                  {applicant.status.charAt(0).toUpperCase() + applicant.status.slice(1)}
-                                </Badge>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {formatDate(applicant.appliedDate)}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       </div>
-                      
-                      <div className="bg-white rounded-lg shadow-sm border p-6">
-                        <div className="flex justify-between items-center mb-4">
-                          <h2 className="text-lg font-bold text-gray-900">Your Active Job Postings</h2>
-                          <Link to="/post-job" className="text-primary text-sm font-medium hover:text-primary/80">
-                            Post New Job
-                          </Link>
-                        </div>
-                        
-                        <div className="space-y-4">
-                          {postedJobs.slice(0, 2).map((job) => (
-                            <JobCard key={job.id} job={job} compact />
-                          ))}
-                        </div>
-                      </div>
-                    </>
+                          ))
                   )}
                 </div>
-                
-                <div>
-                  <div className="bg-white rounded-lg shadow-sm border p-6 sticky top-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="font-bold text-gray-900">Recent Notifications</h2>
-                      <button
-                        onClick={markAllAsRead}
-                        className="text-xs text-primary hover:text-primary/80"
-                      >
-                        Mark all as read
-                      </button>
                     </div>
-                    
-                    {notifications.length > 0 ? (
-                      <div className="space-y-4">
-                        {notifications.slice(0, 5).map((notification) => (
-                          <div
-                            key={notification.id}
-                            className={`p-3 rounded-md ${notification.read ? 'bg-white' : 'bg-primary/5 border border-primary/20'}`}
-                          >
-                            <p className={`text-sm ${notification.read ? 'text-gray-600' : 'text-gray-900 font-medium'}`}>
-                              {notification.message}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
-                          </div>
-                        ))}
-                        
-                        <div className="pt-2">
-                          <Link 
-                            to="#" 
-                            className="text-sm text-primary hover:text-primary/80 flex items-center justify-center"
-                          >
-                            View all notifications
-                            <ChevronRight className="h-4 w-4 ml-1" />
-                          </Link>
-                        </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="applicants" className="space-y-4">
+                    <div className="bg-white rounded-lg border shadow-sm">
+                      <div className="px-6 py-4 border-b">
+                        <h3 className="font-semibold text-lg">Recent Applicants</h3>
+                      </div>
+                      
+                      <div className="divide-y">
+                        {!recruiterDashboard || !recruiterDashboard.recentApplications || recruiterDashboard.recentApplications.length === 0 ? (
+                          <div className="px-6 py-8 text-center">
+                            <p className="text-gray-500">No recent applications.</p>
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-sm">No new notifications</p>
-                    )}
-                    
-                    {userType === "jobseeker" && (
-                      <div className="mt-6 pt-6 border-t">
-                        <h3 className="font-bold text-gray-900 mb-3">Quick Actions</h3>
-                        <div className="space-y-2">
+                          applicants.map((applicant) => (
+                            <div key={applicant.id} className="p-6 hover:bg-gray-50">
+                              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                                <div className="mb-4 md:mb-0">
                           <Link 
-                            to="/jobs" 
-                            className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <Briefcase className="h-4 w-4 mr-2 text-primary" />
-                              <span className="text-sm">Browse Jobs</span>
+                                    to={`/applicant-profile/${applicant.id}`}
+                                    className="text-lg font-medium text-gray-900 hover:text-gray-700"
+                                  >
+                                    {applicant.name}
+                                  </Link>
+                                  <div className="flex flex-wrap items-center mt-1 space-x-4">
+                                    <div className="flex items-center text-sm text-gray-600">
+                                      <CalendarDays className="h-4 w-4 mr-1" />
+                                      Applied {formatDate(applicant.appliedDate)}
+                                    </div>
+                                    {applicant.jobTitle && (
+                                      <div className="flex items-center text-sm text-gray-600">
+                                        <Briefcase className="h-4 w-4 mr-1" />
+                                        {applicant.jobTitle}
+                                      </div>
+                                    )}
+                                  </div>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                          </Link>
-                          <Link 
-                            to="/profile" 
-                            className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors"
-                          >
+                                
                             <div className="flex items-center">
-                              <User className="h-4 w-4 mr-2 text-primary" />
-                              <span className="text-sm">Update Profile</span>
+                                  <Badge className={`flex items-center space-x-1 ${getStatusColor(applicant.status)}`}>
+                                    {getStatusIcon(applicant.status)}
+                                    <span className="capitalize">{applicant.status}</span>
+                                  </Badge>
+                                  <Link to={`/applicant-profile/${applicant.id}`} className="ml-4">
+                                    <Button variant="ghost" size="sm">
+                                      View Details
+                                    </Button>
+                                  </Link>
+                                </div>
+                              </div>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                          </Link>
-                        </div>
+                          ))
+                        )}
                       </div>
-                    )}
-                    
-                    {userType === "recruiter" && (
-                      <div className="mt-6 pt-6 border-t">
-                        <h3 className="font-bold text-gray-900 mb-3">Quick Actions</h3>
-                        <div className="space-y-2">
-                          <Link 
-                            to="/post-job" 
-                            className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <Briefcase className="h-4 w-4 mr-2 text-primary" />
-                              <span className="text-sm">Post New Job</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                          </Link>
-                          <Link 
-                            to="/profile" 
-                            className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-md transition-colors"
-                          >
-                            <div className="flex items-center">
-                              <User className="h-4 w-4 mr-2 text-primary" />
-                              <span className="text-sm">Update Profile</span>
-                            </div>
-                            <ChevronRight className="h-4 w-4 text-gray-400" />
-                          </Link>
-                        </div>
-                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
                     )}
                   </div>
-                </div>
-              </div>
-            </TabsContent>
             
-            {/* Notifications Tab */}
-            <TabsContent value="notifications">
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-lg font-bold text-gray-900">All Notifications</h2>
+            {/* Sidebar - 1/3 width on large screens */}
+            <div className="space-y-6">
+              {/* Notifications */}
+              <div className="bg-white rounded-lg border shadow-sm">
+                <div className="px-6 py-4 border-b flex justify-between items-center">
+                  <h3 className="font-semibold text-lg">Notifications</h3>
+                  {notifications.length > 0 && (
                   <button
                     onClick={markAllAsRead}
-                    className="text-sm text-primary hover:text-primary/80"
+                      className="text-sm text-blue-600 hover:text-blue-800"
                   >
                     Mark all as read
                   </button>
+                  )}
                 </div>
                 
-                {notifications.length > 0 ? (
-                  <div className="space-y-4">
-                    {notifications.map((notification) => (
+                <div className="divide-y">
+                  {notifications.length === 0 ? (
+                    <div className="px-6 py-8 text-center">
+                      <Bell className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-500">No new notifications.</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
                       <div
                         key={notification.id}
-                        className={`p-4 rounded-md ${notification.read ? 'bg-white border' : 'bg-primary/5 border border-primary/20'}`}
+                        className={`px-6 py-4 hover:bg-gray-50 ${!notification.read ? 'bg-blue-50' : ''}`}
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start">
-                            <div className="bg-primary/10 rounded-full p-2 mr-3">
-                              <Bell className="h-5 w-5 text-primary" />
-                            </div>
-                            <div>
-                              <p className={`${notification.read ? 'text-gray-600' : 'text-gray-900 font-medium'}`}>
-                                {notification.message}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">{notification.time}</p>
-                            </div>
-                          </div>
-                          {!notification.read && (
-                            <div className="h-2 w-2 bg-primary rounded-full"></div>
-                          )}
-                        </div>
+                        <p className="text-sm text-gray-900">{notification.message}</p>
+                        <p className="text-xs text-gray-500 mt-1">{formatDate(notification.time)}</p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <Bell className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">No notifications</h3>
-                    <p className="text-gray-500">You're all caught up!</p>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-            
-            {/* Applications Tab (Job Seeker) */}
-            {userType === "jobseeker" && (
-              <TabsContent value="applications">
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-lg font-bold text-gray-900">Your Job Applications</h2>
-                    <Link to="/jobs" className="text-primary hover:text-primary/80 text-sm">
-                      Browse More Jobs
-                    </Link>
-                  </div>
-                  
-                  {applications.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Job Title</th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Company</th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Applied Date</th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
-                            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {applications.map((application) => (
-                            <tr key={application.id} className="border-b last:border-0">
-                              <td className="py-4 px-4">
-                                <div className="font-medium">{application.jobTitle}</div>
-                              </td>
-                              <td className="py-4 px-4 text-gray-600">{application.company}</td>
-                              <td className="py-4 px-4 text-gray-600">{formatDate(application.appliedDate)}</td>
-                              <td className="py-4 px-4">
-                                <Badge className={`flex items-center gap-1 ${getStatusColor(application.status)}`}>
-                                  {getStatusIcon(application.status)}
-                                  <span>{application.status.charAt(0).toUpperCase() + application.status.slice(1)}</span>
-                                </Badge>
-                              </td>
-                              <td className="py-4 px-4 text-right">
-                                <Link 
-                                  to={`/applications/${application.id}`} 
-                                  className="text-primary hover:text-primary/80 text-sm"
-                                >
-                                  View Details
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Inbox className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-1">No applications yet</h3>
-                      <p className="text-gray-500 mb-6">You haven't applied to any jobs yet.</p>
-                      <Link to="/jobs" className="btn-primary">
-                        Browse Jobs
-                      </Link>
-                    </div>
+                    ))
                   )}
                 </div>
-              </TabsContent>
-            )}
-            
-            {/* Saved Jobs Tab (Job Seeker) */}
-            {userType === "jobseeker" && (
-              <TabsContent value="saved-jobs">
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-lg font-bold text-gray-900">Your Saved Jobs</h2>
                   </div>
                   
-                  {savedJobs.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {savedJobs.map((job) => (
-                        <JobCard key={job.id} job={job} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Bookmark className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-1">No saved jobs</h3>
-                      <p className="text-gray-500 mb-6">You haven't saved any jobs yet.</p>
-                      <Link to="/jobs" className="btn-primary">
-                        Browse Jobs
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            )}
-            
-            {/* Applicants Tab (Recruiter) */}
-            {userType === "recruiter" && (
-              <TabsContent value="applicants">
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-lg font-bold text-gray-900">Job Applicants</h2>
-                  </div>
-                  
-                  {applicants.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Applicant</th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Job Position</th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Applied Date</th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Status</th>
-                            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {applicants.map((applicant) => (
-                            <tr key={applicant.id} className="border-b last:border-0">
-                              <td className="py-4 px-4">
-                                <div className="font-medium">{applicant.name}</div>
-                              </td>
-                              <td className="py-4 px-4 text-gray-600">{applicant.jobTitle}</td>
-                              <td className="py-4 px-4 text-gray-600">{formatDate(applicant.appliedDate)}</td>
-                              <td className="py-4 px-4">
-                                <Badge className={`flex items-center gap-1 ${getStatusColor(applicant.status)}`}>
-                                  {getStatusIcon(applicant.status)}
-                                  <span>{applicant.status.charAt(0).toUpperCase() + applicant.status.slice(1)}</span>
-                                </Badge>
-                              </td>
-                              <td className="py-4 px-4 text-right">
-                                <Link 
-                                  to={`/applicants/${applicant.id}`} 
-                                  className="text-primary hover:text-primary/80 text-sm"
-                                >
-                                  View Profile
-                                </Link>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-1">No applicants yet</h3>
-                      <p className="text-gray-500 mb-6">You don't have any applicants for your job postings.</p>
-                      <Link to="/post-job" className="btn-primary">
-                        Post a New Job
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            )}
-            
-            {/* Posted Jobs Tab (Recruiter) */}
-            {userType === "recruiter" && (
-              <TabsContent value="posted-jobs">
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-lg font-bold text-gray-900">Your Posted Jobs</h2>
-                    <Link to="/post-job" className="btn-primary">
-                      Post New Job
-                    </Link>
-                  </div>
-                  
-                  {postedJobs.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-6">
-                      {postedJobs.map((job) => (
-                        <div key={job.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="font-bold text-lg">{job.title}</h3>
-                              <p className="text-gray-600">{job.company}</p>
-                              <div className="flex items-center mt-2">
-                                <MapPin className="h-4 w-4 mr-1 text-gray-500" />
-                                <span className="text-sm text-gray-600">{job.location}</span>
-                              </div>
-                            </div>
-                            <Badge className="bg-green-100 text-green-800 border-0">
-                              {job.job_type}
-                            </Badge>
-                          </div>
-                          
-                          <div className="mt-4 flex items-center justify-between">
-                            <div className="flex items-center">
-                              <Badge className="bg-primary/10 text-primary border-0 mr-2">
-                                24 applications
-                              </Badge>
-                              <span className="text-sm text-gray-500">
-                                Deadline: {formatDate(job.deadline)}
-                              </span>
-                            </div>
-                            
-                            <div className="flex space-x-2">
-                              <Button variant="outline" size="sm">
-                                Edit
-                              </Button>
-                              <Link to={`/jobs/${job.id}/applicants`} className="btn-primary text-sm px-3 py-2">
-                                View Applicants
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Briefcase className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 mb-1">No jobs posted</h3>
-                      <p className="text-gray-500 mb-6">You haven't posted any jobs yet.</p>
-                      <Link to="/post-job" className="btn-primary">
-                        Post a New Job
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            )}
-            
-            {/* Settings Tab */}
-            <TabsContent value="settings">
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-lg font-bold text-gray-900">Account Settings</h2>
+              {/* Quick Links */}
+              <div className="bg-white rounded-lg border shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold text-lg">Quick Links</h3>
                 </div>
                 
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-md font-medium text-gray-900 mb-4">Notification Preferences</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            id="email-notifications"
-                            type="checkbox"
-                            defaultChecked
-                            className="rounded text-primary focus:ring-primary"
-                          />
-                        </div>
-                        <div className="ml-3">
-                          <label htmlFor="email-notifications" className="text-sm font-medium text-gray-700">
-                            Email Notifications
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Receive email notifications for application updates and new job matches.
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            id="job-alerts"
-                            type="checkbox"
-                            defaultChecked
-                            className="rounded text-primary focus:ring-primary"
-                          />
-                        </div>
-                        <div className="ml-3">
-                          <label htmlFor="job-alerts" className="text-sm font-medium text-gray-700">
-                            Job Alerts
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Get notified when new jobs matching your profile are posted.
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            id="application-updates"
-                            type="checkbox"
-                            defaultChecked
-                            className="rounded text-primary focus:ring-primary"
-                          />
-                        </div>
-                        <div className="ml-3">
-                          <label htmlFor="application-updates" className="text-sm font-medium text-gray-700">
-                            Application Status Updates
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Receive updates when the status of your application changes.
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            id="marketing"
-                            type="checkbox"
-                            className="rounded text-primary focus:ring-primary"
-                          />
-                        </div>
-                        <div className="ml-3">
-                          <label htmlFor="marketing" className="text-sm font-medium text-gray-700">
-                            Marketing Communications
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Receive tips, trends, and updates from HireHub.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-6 border-t">
-                    <h3 className="text-md font-medium text-gray-900 mb-4">Privacy Settings</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            id="profile-visibility"
-                            type="checkbox"
-                            defaultChecked
-                            className="rounded text-primary focus:ring-primary"
-                          />
-                        </div>
-                        <div className="ml-3">
-                          <label htmlFor="profile-visibility" className="text-sm font-medium text-gray-700">
-                            Profile Visibility
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Allow recruiters to find and view your profile.
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            id="contact-info"
-                            type="checkbox"
-                            defaultChecked
-                            className="rounded text-primary focus:ring-primary"
-                          />
-                        </div>
-                        <div className="ml-3">
-                          <label htmlFor="contact-info" className="text-sm font-medium text-gray-700">
-                            Contact Information
-                          </label>
-                          <p className="text-xs text-gray-500">
-                            Show your contact information to recruiters from companies you apply to.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="pt-6 border-t flex justify-end">
-                    <Button className="btn-primary">
-                      Save Settings
-                    </Button>
-                  </div>
+                <div className="p-4">
+                  <nav className="space-y-2">
+                    {userType === "applicant" ? (
+                      <>
+                        <Link to="/jobs" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Briefcase className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Browse Jobs</span>
+                        </Link>
+                        <Link to="/messages" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Inbox className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Messages</span>
+                        </Link>
+                        <Link to="/profile" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <User className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Edit Profile</span>
+                        </Link>
+                        <Link to="/settings" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Settings className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Account Settings</span>
+                                </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link to="/post-job" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Briefcase className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Post a Job</span>
+                        </Link>
+                        <Link to="/my-jobs" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Bookmark className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Manage Jobs</span>
+                      </Link>
+                        <Link to="/messages" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Inbox className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Messages</span>
+                    </Link>
+                        <Link to="/company-profile" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Building className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Company Profile</span>
+                              </Link>
+                        <Link to="/settings" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                          <Settings className="h-5 w-5 mr-3 text-gray-500" />
+                          <span>Account Settings</span>
+                      </Link>
+                      </>
+                    )}
+                  </nav>
                 </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+      </main>
       
       <Footer />
     </div>

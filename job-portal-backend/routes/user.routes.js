@@ -14,4 +14,8 @@ router.patch(
   userController.markAllNotificationsRead
 );
 
+// Profile routes
+router.get("/:id/profile", userController.getProfile);
+router.put("/:id/profile", userController.updateProfile);
+
 module.exports = router;
