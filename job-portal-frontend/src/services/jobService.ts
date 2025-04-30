@@ -186,7 +186,35 @@ const jobService = {
 
   // For applicants: Delete/cancel an application
   deleteApplication: async (applicationId: string) => {
-    return api.delete(`/applications/${applicationId}`);
+    try {
+      // Get user from localStorage to include authentication
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        throw new Error('User not authenticated. Please sign in.');
+      }
+
+      let currentUser;
+      try {
+        currentUser = JSON.parse(userStr);
+      } catch (e) {
+        console.error('Failed to parse user data:', e);
+        throw new Error('Invalid user data. Please sign in again.');
+      }
+
+      if (!currentUser.id) {
+        console.error('Missing user ID in stored data:', currentUser);
+        throw new Error('User ID not found. Please sign in again.');
+      }
+      
+      // Include user ID as a query parameter for extra security
+      return api.delete(`/applications/${applicationId}?user_id=${currentUser.id}`);
+    } catch (error: any) {
+      console.error('Error deleting application:', error);
+      if (error.response?.status === 403) {
+        throw new Error('You do not have permission to delete this application.');
+      }
+      throw error;
+    }
   }
 };
 

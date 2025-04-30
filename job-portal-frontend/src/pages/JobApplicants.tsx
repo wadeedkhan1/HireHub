@@ -51,6 +51,7 @@ interface Applicant {
   status: "applied" | "shortlisted" | "accepted" | "rejected";
   resume_url?: string;
   profile?: string;
+  profile_url?: string;
 }
 
 interface DetailedApplicant extends Applicant {
@@ -574,6 +575,31 @@ const JobApplicants = () => {
                       </div>
                     </div>
                   )}
+                  
+                  {/* Show profile content if available */}
+                  {selectedApplicant.profile && (
+                    <div>
+                      <h4 className="font-medium mb-2">Profile</h4>
+                      <div className="p-4 bg-gray-50 border rounded-md text-sm whitespace-pre-wrap">
+                        {selectedApplicant.profile}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Links section for resume URL */}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {selectedApplicant.resume_url && (
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(selectedApplicant.resume_url, '_blank')}
+                        className="flex items-center"
+                      >
+                        <i className="mr-2">📄</i>
+                        View Resume
+                      </Button>
+                    )}
+                  </div>
                 </TabsContent>
                 
                 <TabsContent value="actions">

@@ -6,7 +6,8 @@ const applicationController = require("../controllers/application.controller");
 router.post("/jobs/:jobId/apply", applicationController.applyForJob);
 router.get("/:applicationId", applicationController.getApplicationDetails);
 router.put("/:applicationId/status", applicationController.updateApplicationStatus);
-router.delete("/:applicationId", applicationController.cancelApplication);
+router.delete("/:applicationId/cancel", applicationController.cancelApplication);
+router.delete("/:applicationId", applicationController.deleteApplication);
 
 // Get applications by user or recruiter
 router.get("/user/:userId", applicationController.getApplicationsByUser);

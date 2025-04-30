@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Link } from "react-router-dom";
 import { BriefcaseBusiness, Github, Twitter, Linkedin, Facebook } from "lucide-react";
@@ -51,8 +50,8 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/jobs?category=Science" className="text-sm text-gray-600 hover:text-primary">
-                  Science Jobs
+                <Link to="/jobs?category=Management" className="text-sm text-gray-600 hover:text-primary">
+                  Management Jobs
                 </Link>
               </li>
             </ul>
@@ -72,12 +71,12 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/resources" className="text-sm text-gray-600 hover:text-primary">
+                <Link to="#" className="text-sm text-gray-600 hover:text-primary">
                   Resources
                 </Link>
               </li>
               <li>
-                <Link to="/faq" className="text-sm text-gray-600 hover:text-primary">
+                <Link to="#" className="text-sm text-gray-600 hover:text-primary">
                   FAQ
                 </Link>
               </li>
@@ -88,22 +87,22 @@ const Footer = () => {
             <h3 className="text-sm font-medium text-gray-900">Company</h3>
             <ul className="mt-4 space-y-2">
               <li>
-                <Link to="/about" className="text-sm text-gray-600 hover:text-primary">
+                <Link to="#" className="text-sm text-gray-600 hover:text-primary">
                   About Us
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="text-sm text-gray-600 hover:text-primary">
+                <Link to="#" className="text-sm text-gray-600 hover:text-primary">
                   Contact Us
                 </Link>
               </li>
               <li>
-                <Link to="/privacy" className="text-sm text-gray-600 hover:text-primary">
+                <Link to="#" className="text-sm text-gray-600 hover:text-primary">
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link to="/terms" className="text-sm text-gray-600 hover:text-primary">
+                <Link to="#" className="text-sm text-gray-600 hover:text-primary">
                   Terms of Service
                 </Link>
               </li>

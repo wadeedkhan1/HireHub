@@ -15,11 +15,22 @@ import {
   CalendarDays,
   Bookmark,
   MapPin,
-  DollarSign
+  DollarSign,
+  Trash2
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import DashboardStats from "@/components/dashboard/DashboardStats";
 import JobCard, { JobData } from "@/components/jobs/JobCard";
 import Navbar from "@/components/layout/Navbar";
@@ -31,6 +42,7 @@ import dashboardService, {
   isApplicantDashboard
 } from "@/services/dashboardService";
 import authService from "@/services/authService";
+import jobService from "@/services/jobService";
 import { toast } from "sonner";
 
 interface Notification {
@@ -42,9 +54,13 @@ interface Notification {
 
 interface Application {
   id: number;
+  application_id: number;
   jobTitle: string;
+  job_title: string;
   company: string;
+  company_name: string;
   appliedDate: string;
+  date_of_application: string;
   status: string;
   deadline?: string;
 }
@@ -81,6 +97,10 @@ const Dashboard = () => {
   const [recruiterDashboard, setRecruiterDashboard] = useState<RecruiterDashboardData | null>(null);
   const [applicantDashboard, setApplicantDashboard] = useState<ApplicantDashboardData | null>(null);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
+  
+  // Application deletion
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] = useState<number | null>(null);
   
   // Check authentication and load dashboard data
   useEffect(() => {
@@ -150,17 +170,25 @@ const Dashboard = () => {
             // Applicant dashboard - Use the real API data
             setApplicantDashboard(dashboardData);
             
+            // Helper function to map API data to our Application interface
+            const mapApiToApplications = (data: any[]): Application[] => {
+              return data.map(app => ({
+                id: app.application_id,
+                application_id: app.application_id,
+                jobTitle: app.job_title,
+                job_title: app.job_title,
+                company: app.company_name || "Company",
+                company_name: app.company_name || "Company",
+                appliedDate: app.date_of_application,
+                date_of_application: app.date_of_application,
+                status: app.status,
+                deadline: app.deadline
+              }));
+            };
+            
             // Convert the backend data to our format - prefer myApplications over recentApplications
             const applicationsData = dashboardData.myApplications || dashboardData.recentApplications || [];
-            const formattedApplications: Application[] = applicationsData.map(app => ({
-                id: app.application_id,
-                jobTitle: app.job_title,
-              company: app.company_name || "Company",
-                appliedDate: app.date_of_application,
-                status: app.status,
-              deadline: app.deadline
-              }));
-              setApplications(formattedApplications);
+            setApplications(mapApiToApplications(applicationsData));
             
             // Handle recent jobs (new format)
             if (dashboardData.recentJobs && dashboardData.recentJobs.length > 0) {
@@ -242,6 +270,49 @@ const Dashboard = () => {
     if (!dateString) return "N/A";
     const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
     return new Date(dateString).toLocaleDateString(undefined, options);
+  };
+  
+  // Handle application deletion
+  const handleDeleteClick = (applicationId: number) => {
+    setApplicationToDelete(applicationId);
+    setDeleteDialogOpen(true);
+  };
+  
+  // Handle deletion confirmation
+  const confirmDelete = async () => {
+    if (!applicationToDelete) {
+      setDeleteDialogOpen(false);
+      return;
+    }
+    
+    try {
+      await jobService.deleteApplication(applicationToDelete.toString());
+      
+      // Remove the application from state
+      setApplications(applications.filter(app => 
+        app.id !== applicationToDelete && app.application_id !== applicationToDelete
+      ));
+      
+      // Update dashboard stats
+      if (dashboardStats) {
+        setDashboardStats({
+          ...dashboardStats,
+          totalApplications: dashboardStats.totalApplications - 1,
+          pendingApplications: applications.find(a => 
+            (a.id === applicationToDelete || a.application_id === applicationToDelete) && 
+            (a.status === "applied" || a.status === "pending")
+          ) ? dashboardStats.pendingApplications - 1 : dashboardStats.pendingApplications,
+        });
+      }
+      
+      toast.success("Application deleted successfully");
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      toast.error("Failed to delete application");
+    } finally {
+      setDeleteDialogOpen(false);
+      setApplicationToDelete(null);
+    }
   };
   
   // Get status badge color
@@ -366,16 +437,28 @@ const Dashboard = () => {
                                   </div>
                         </div>
                         
-                              <div className="flex items-center">
+                              <div className="flex items-center space-x-2">
                                   <Badge className={`flex items-center space-x-1 ${getStatusColor(application.status)}`}>
                                     {getStatusIcon(application.status)}
                                     <span className="capitalize">
                                       {application.status === "interviewing" ? "Interview" : application.status}
                                     </span>
                                   </Badge>
-                                  <Link to={`/applications/${application.id}`} className="ml-4 text-gray-500 hover:text-gray-700">
-                                    <ChevronRight className="h-5 w-5" />
-                                  </Link>
+                                  <div className="flex space-x-2">
+                                    <Link to={`/applications/${application.id}`} className="text-gray-500 hover:text-gray-700">
+                                      <Button variant="ghost" size="sm">
+                                        <ChevronRight className="h-5 w-5" />
+                                      </Button>
+                                    </Link>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => handleDeleteClick(application.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -615,7 +698,7 @@ const Dashboard = () => {
                           <Briefcase className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Browse Jobs</span>
                         </Link>
-                        <Link to="/messages" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                        <Link to="#" className="flex items-center p-2 rounded-md hover:bg-gray-100">
                           <Inbox className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Messages</span>
                         </Link>
@@ -623,10 +706,10 @@ const Dashboard = () => {
                           <User className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Edit Profile</span>
                         </Link>
-                        <Link to="/settings" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                        <Link to="/profile" className="flex items-center p-2 rounded-md hover:bg-gray-100">
                           <Settings className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Account Settings</span>
-                                </Link>
+                        </Link>
                       </>
                     ) : (
                       <>
@@ -634,22 +717,22 @@ const Dashboard = () => {
                           <Briefcase className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Post a Job</span>
                         </Link>
-                        <Link to="/my-jobs" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                        <Link to="#" className="flex items-center p-2 rounded-md hover:bg-gray-100">
                           <Bookmark className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Manage Jobs</span>
-                      </Link>
-                        <Link to="/messages" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                        </Link>
+                        <Link to="#" className="flex items-center p-2 rounded-md hover:bg-gray-100">
                           <Inbox className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Messages</span>
-                    </Link>
-                        <Link to="/company-profile" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                        </Link>
+                        <Link to="#" className="flex items-center p-2 rounded-md hover:bg-gray-100">
                           <Building className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Company Profile</span>
-                              </Link>
-                        <Link to="/settings" className="flex items-center p-2 rounded-md hover:bg-gray-100">
+                        </Link>
+                        <Link to="/profile" className="flex items-center p-2 rounded-md hover:bg-gray-100">
                           <Settings className="h-5 w-5 mr-3 text-gray-500" />
                           <span>Account Settings</span>
-                      </Link>
+                        </Link>
                       </>
                     )}
                   </nav>
@@ -661,6 +744,24 @@ const Dashboard = () => {
       </main>
       
       <Footer />
+
+      {/* Delete Application Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this application? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

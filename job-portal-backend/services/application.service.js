@@ -365,3 +365,54 @@ exports.getApplicationsByJob = async (jobId) => {
     throw error;
   }
 };
+
+exports.deleteApplication = async (applicationId, userId) => {
+  try {
+    console.log(`Deleting application ${applicationId} for user ${userId}`);
+    
+    // First check if the application exists and belongs to this user
+    const [application] = await runQuery(
+      "SELECT a.*, j.title as job_title FROM Applications a JOIN Jobs j ON a.job_id = j.id WHERE a.id = ? AND a.user_id = ?", 
+      [applicationId, userId]
+    );
+    
+    if (!application) {
+      throw new Error("Application not found or you don't have permission to delete it");
+    }
+    
+    // Get the job ID to update counters later
+    const jobId = application.job_id;
+    const wasAccepted = application.status === 'accepted';
+    
+    // Delete the application
+    await runQuery("DELETE FROM Applications WHERE id = ?", [applicationId]);
+    
+    // Update job counters
+    await runQuery(
+      "UPDATE Jobs SET active_applications = GREATEST(active_applications - 1, 0) WHERE id = ?",
+      [jobId]
+    );
+    
+    // If the application was accepted, also decrement accepted_candidates
+    if (wasAccepted) {
+      await runQuery(
+        "UPDATE Jobs SET accepted_candidates = GREATEST(accepted_candidates - 1, 0) WHERE id = ?",
+        [jobId]
+      );
+    }
+    
+    // Add notification that application was deleted
+    try {
+      const note = `🗑️ You deleted your application for "${application.job_title}"`;
+      await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [userId, note]);
+    } catch (notificationError) {
+      // Don't fail the whole process for a notification error
+      console.warn('Failed to create notification, but application was deleted:', notificationError);
+    }
+    
+    return { success: true, message: "Application deleted successfully" };
+  } catch (error) {
+    console.error(`Error deleting application ${applicationId}:`, error.message);
+    throw error;
+  }
+};

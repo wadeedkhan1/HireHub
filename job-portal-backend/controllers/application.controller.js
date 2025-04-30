@@ -140,3 +140,44 @@ exports.getApplicationsByJob = async (req, res, next) => {
     return res.status(500).json({ message: "Failed to load job applicants" });
   }
 };
+
+exports.deleteApplication = async (req, res, next) => {
+  try {
+    const applicationId = req.params.applicationId;
+    console.log("Deleting application:", applicationId);
+    
+    if (!applicationId) {
+      return res.status(400).json({ message: "Application ID is required" });
+    }
+    
+    // Get user ID from auth middleware or request
+    let userId = null;
+    if (req.userId) {
+      userId = req.userId;
+    } else if (req.query.user_id) {
+      userId = req.query.user_id;
+    } else if (req.body.user_id) {
+      userId = req.body.user_id;
+    }
+    
+    if (!userId) {
+      return res.status(401).json({ message: "User ID not found. Please sign in again." });
+    }
+    
+    try {
+      const result = await applicationService.deleteApplication(applicationId, userId);
+      return res.json({ message: "Application deleted successfully", result });
+    } catch (serviceError) {
+      console.error("Error deleting application:", serviceError.message);
+      
+      if (serviceError.message.includes("not found") || serviceError.message.includes("permission")) {
+        return res.status(403).json({ message: serviceError.message });
+      }
+      
+      return res.status(400).json({ message: serviceError.message || "Failed to delete application" });
+    }
+  } catch (err) {
+    console.error("Error in deleteApplication controller:", err.message);
+    return res.status(500).json({ message: "Failed to delete application. Please try again." });
+  }
+};

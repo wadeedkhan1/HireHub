@@ -1,73 +1,84 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Briefcase, Building, MapPin, Calendar, Clock, CheckCircle, XCircle, ArrowLeft } from "lucide-react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Briefcase, Building, MapPin, Calendar, Clock, CheckCircle, XCircle, ArrowLeft, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import jobService from "@/services/jobService";
+import { toast } from "sonner";
 
 interface Application {
-  id: number;
-  jobTitle: string;
-  company: string;
-  location: string;
-  appliedDate: string;
-  status: "pending" | "reviewing" | "interviewing" | "accepted" | "rejected";
-  jobDescription: string;
-  requirements: string[];
-  skills: string[];
-  benefits: string[];
-  interviewDate?: string;
-  interviewType?: string;
-  interviewLocation?: string;
-  notes?: string;
+  application_id: number;
+  job_title: string;
+  company_name: string;
+  job_location?: string;
+  date_of_application: string;
+  status: string;
+  resumeUrl?: string;
+  profile?: string;
+  skills?: string[];
+  education?: any[];
+  email?: string;
 }
 
 const ApplicationDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [application, setApplication] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setApplication({
-        id: 1,
-        jobTitle: "Senior Frontend Developer",
-        company: "TechCorp Inc.",
-        location: "San Francisco, CA",
-        appliedDate: "2024-03-15",
-        status: "interviewing",
-        jobDescription: "We are looking for a skilled Senior Frontend Developer to join our team. The ideal candidate will have extensive experience with React, TypeScript, and modern frontend development practices.",
-        requirements: [
-          "5+ years of experience in frontend development",
-          "Strong knowledge of React and TypeScript",
-          "Experience with modern frontend tools and frameworks",
-          "Excellent problem-solving skills",
-          "Strong communication and collaboration abilities"
-        ],
-        skills: ["React", "TypeScript", "JavaScript", "HTML", "CSS", "Tailwind CSS", "Redux"],
-        benefits: [
-          "Competitive salary and benefits package",
-          "Health insurance and wellness programs",
-          "Flexible work hours and remote work options",
-          "Professional development opportunities",
-          "Team building activities and events"
-        ],
-        interviewDate: "2024-03-25",
-        interviewType: "Technical Interview",
-        interviewLocation: "Virtual (Zoom)",
-        notes: "Please prepare a short presentation about your previous projects and be ready for a coding challenge."
-      });
-      setLoading(false);
-    }, 1000);
+    const fetchApplicationDetails = async () => {
+      try {
+        setLoading(true);
+        if (!id) return;
+        
+        const response = await jobService.getApplicationDetails(id);
+        setApplication(response.data);
+      } catch (error) {
+        console.error("Error fetching application details:", error);
+        toast.error("Failed to load application details");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApplicationDetails();
   }, [id]);
+
+  const handleDelete = async () => {
+    try {
+      if (!id) return;
+      
+      await jobService.deleteApplication(id);
+      toast.success("Application deleted successfully");
+      // Navigate back to the applications list
+      navigate("/applications");
+    } catch (error) {
+      console.error("Error deleting application:", error);
+      toast.error("Failed to delete application");
+    } finally {
+      setDeleteDialogOpen(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending":
+      case "applied":
         return "bg-amber-100 text-amber-800";
-      case "reviewing":
+      case "shortlisted":
         return "bg-blue-100 text-blue-800";
       case "interviewing":
         return "bg-purple-100 text-purple-800";
@@ -82,9 +93,9 @@ const ApplicationDetails = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "pending":
+      case "applied":
         return <Clock className="h-4 w-4 mr-1" />;
-      case "reviewing":
+      case "shortlisted":
         return <Clock className="h-4 w-4 mr-1" />;
       case "interviewing":
         return <Calendar className="h-4 w-4 mr-1" />;
@@ -126,6 +137,11 @@ const ApplicationDetails = () => {
     );
   }
 
+  // Format date
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -140,13 +156,17 @@ const ApplicationDetails = () => {
             
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{application.jobTitle}</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{application.job_title}</h1>
                 <div className="flex items-center text-gray-500 mt-1">
                   <Building className="h-4 w-4 mr-2" />
-                  <span>{application.company}</span>
-                  <span className="mx-2">•</span>
-                  <MapPin className="h-4 w-4 mr-2" />
-                  <span>{application.location}</span>
+                  <span>{application.company_name}</span>
+                  {application.job_location && (
+                    <>
+                      <span className="mx-2">•</span>
+                      <MapPin className="h-4 w-4 mr-2" />
+                      <span>{application.job_location}</span>
+                    </>
+                  )}
                 </div>
               </div>
               <Badge className={`${getStatusColor(application.status)} flex items-center`}>
@@ -158,39 +178,33 @@ const ApplicationDetails = () => {
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Job Description</h2>
-                <p className="text-gray-600">{application.jobDescription}</p>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Requirements</h2>
-                <ul className="list-disc list-inside space-y-2 text-gray-600">
-                  {application.requirements.map((req, index) => (
-                    <li key={index}>{req}</li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Required Skills</h2>
-                <div className="flex flex-wrap gap-2">
-                  {application.skills.map((skill, index) => (
-                    <Badge key={index} className="bg-primary/10 text-primary border-0">
-                      {skill}
-                    </Badge>
-                  ))}
+              {application.skills && application.skills.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border p-6">
+                  <h2 className="text-lg font-bold text-gray-900 mb-4">Skills</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {application.skills.map((skill, index) => (
+                      <Badge key={index} className="bg-primary/10 text-primary border-0">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               
-              <div className="bg-white rounded-lg shadow-sm border p-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Benefits</h2>
-                <ul className="list-disc list-inside space-y-2 text-gray-600">
-                  {application.benefits.map((benefit, index) => (
-                    <li key={index}>{benefit}</li>
-                  ))}
-                </ul>
-              </div>
+              {application.education && application.education.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border p-6">
+                  <h2 className="text-lg font-bold text-gray-900 mb-4">Education</h2>
+                  <div className="space-y-4">
+                    {application.education.map((edu, index) => (
+                      <div key={index} className="border-b pb-3 last:border-0 last:pb-0">
+                        <h3 className="font-medium">{edu.institution}</h3>
+                        <p className="text-gray-600">{edu.field}</p>
+                        <p className="text-sm text-gray-500">{edu.duration}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="space-y-6">
@@ -201,55 +215,68 @@ const ApplicationDetails = () => {
                     <div className="text-sm text-gray-500">Applied Date</div>
                     <div className="flex items-center text-gray-600">
                       <Calendar className="h-4 w-4 mr-2" />
-                      <span>{new Date(application.appliedDate).toLocaleDateString()}</span>
+                      <span>{formatDate(application.date_of_application)}</span>
                     </div>
                   </div>
                   
-                  {application.interviewDate && (
+                  {application.status && (
                     <div>
-                      <div className="text-sm text-gray-500">Interview Date</div>
-                      <div className="flex items-center text-gray-600">
-                        <Calendar className="h-4 w-4 mr-2" />
-                        <span>{new Date(application.interviewDate).toLocaleDateString()}</span>
-                      </div>
+                      <div className="text-sm text-gray-500">Status</div>
+                      <div className="text-gray-600 capitalize">{application.status}</div>
                     </div>
                   )}
                   
-                  {application.interviewType && (
+                  {application.email && (
                     <div>
-                      <div className="text-sm text-gray-500">Interview Type</div>
-                      <div className="text-gray-600">{application.interviewType}</div>
-                    </div>
-                  )}
-                  
-                  {application.interviewLocation && (
-                    <div>
-                      <div className="text-sm text-gray-500">Interview Location</div>
-                      <div className="text-gray-600">{application.interviewLocation}</div>
+                      <div className="text-sm text-gray-500">Contact Email</div>
+                      <div className="text-gray-600">{application.email}</div>
                     </div>
                   )}
                 </div>
               </div>
               
-              {application.notes && (
-                <div className="bg-white rounded-lg shadow-sm border p-6">
-                  <h2 className="text-lg font-bold text-gray-900 mb-4">Notes</h2>
-                  <p className="text-gray-600">{application.notes}</p>
-                </div>
-              )}
-              
               <div className="bg-white rounded-lg shadow-sm border p-6">
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Actions</h2>
                 <div className="space-y-3">
-                  <Button className="w-full">Download Application</Button>
-                  <Button variant="outline" className="w-full">Contact Recruiter</Button>
-                  <Button variant="outline" className="w-full">Withdraw Application</Button>
+                  {application.resumeUrl && (
+                    <Button className="w-full">
+                      Download Resume
+                    </Button>
+                  )}
+                  <Button variant="outline" className="w-full">
+                    Contact Recruiter
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    className="w-full"
+                    onClick={() => setDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Application
+                  </Button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+      
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this application? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       <Footer />
     </div>
