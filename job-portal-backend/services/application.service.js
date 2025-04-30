@@ -21,7 +21,7 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
     console.log(`Applying for job: User=${userId}, Job=${jobIdNum}, Has cover letter=${!!coverLetter}`);
     
     // Check if job exists - using the numeric job ID
-    const jobs = await runQuery("SELECT recruiter_id, title FROM Jobs WHERE id = ?", [jobIdNum]);
+    const jobs = await runQuery("SELECT recruiter_id, title, max_applicants FROM Jobs WHERE id = ?", [jobIdNum]);
     console.log('Job query result:', jobs);
     
     if (!jobs || jobs.length === 0) {
@@ -29,6 +29,19 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
     }
     
     const job = jobs[0];
+    
+    // Check the current number of applications for this job
+    const [applicationCountResult] = await runQuery(
+      "SELECT COUNT(*) as count FROM Applications WHERE job_id = ?",
+      [jobIdNum]
+    );
+    
+    const currentApplicationCount = applicationCountResult.count;
+    
+    // Check if the maximum number of applicants has been reached
+    if (currentApplicationCount >= job.max_applicants) {
+      throw new Error(`Maximum number of applicants reached for this job (${job.max_applicants})`);
+    }
     
     // Check if already applied
     const existing = await runQuery(
@@ -89,6 +102,12 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
       if (coverLetter) {
         console.log(`Cover letter provided but not stored in database: ${coverLetter.substring(0, 50)}...`);
       }
+      
+      // Update the active_applications count in the Jobs table
+      await runQuery(
+        "UPDATE Jobs SET active_applications = active_applications + 1 WHERE id = ?",
+        [jobIdNum]
+      );
     } catch (dbError) {
       console.error('Database error during application insertion:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
@@ -110,10 +129,39 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
 };
 
 exports.updateStatus = async (applicationId, newStatus) => {
-  const result = await callProcedure("update_application_status", [
-    applicationId,
-    newStatus
-  ]);
+  // First get the current status and job_id
+  const [currentApp] = await runQuery(
+    "SELECT status, job_id FROM Applications WHERE id = ?",
+    [applicationId]
+  );
+  
+  if (!currentApp) {
+    throw new Error("Application not found");
+  }
+  
+  const oldStatus = currentApp.status;
+  const jobId = currentApp.job_id;
+  
+  // Update the application status
+  await runQuery(
+    "UPDATE Applications SET status = ? WHERE id = ?",
+    [newStatus, applicationId]
+  );
+
+  // Update accepted_candidates count if status changes to or from 'accepted'
+  if (oldStatus !== 'accepted' && newStatus === 'accepted') {
+    // Increment accepted_candidates when status changes TO accepted
+    await runQuery(
+      "UPDATE Jobs SET accepted_candidates = accepted_candidates + 1 WHERE id = ?",
+      [jobId]
+    );
+  } else if (oldStatus === 'accepted' && newStatus !== 'accepted') {
+    // Decrement accepted_candidates when status changes FROM accepted
+    await runQuery(
+      "UPDATE Jobs SET accepted_candidates = GREATEST(accepted_candidates - 1, 0) WHERE id = ?",
+      [jobId]
+    );
+  }
 
   // Get application details including job title
   const [appRow] = await runQuery(
@@ -132,7 +180,7 @@ exports.updateStatus = async (applicationId, newStatus) => {
     ]);
   }
 
-  return result;
+  return { applicationId, newStatus };
 };
 
 exports.getApplicationsByUser = async (userId) => {

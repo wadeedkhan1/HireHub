@@ -75,7 +75,13 @@ exports.getJobsByCategory = async (category) => {
 };
 
 exports.getJobById = async (id) => {
-  const query = 'SELECT * FROM Jobs WHERE id = ?';
+  const query = `
+    SELECT j.*, 
+    (SELECT COUNT(*) FROM Applications a WHERE a.job_id = j.id) AS active_applications,
+    (SELECT COUNT(*) FROM Applications a WHERE a.job_id = j.id AND a.status = 'accepted') AS accepted_candidates
+    FROM Jobs j 
+    WHERE j.id = ?
+  `;
   const result = await runQuery(query, [id]);
   return result[0]; 
 };
