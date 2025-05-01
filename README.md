@@ -108,6 +108,12 @@ Uses a **SQL database** with triggers for maintaining data integrity.
 ---
 
 ## 📷 Screenshots
+![image](https://github.com/user-attachments/assets/56f82817-94bf-45d6-8c95-232ceb7baad0)
+![image](https://github.com/user-attachments/assets/3016875d-cc05-4971-9527-374bcd423f1d)
+![image](https://github.com/user-attachments/assets/f6783bc1-285d-461c-863a-00ca77d0d6e4)
+
+
+
 
 
 ---
