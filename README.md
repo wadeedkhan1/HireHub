@@ -23,17 +23,17 @@
 
 ## 🛠 Tech Stack
 
-- **Frontend**: React, TypeScript, React Router  
+### 🔷 Frontend
+- **Framework**: React, TypeScript, React Router  
 - **UI Components**: ShadCN UI, Lucide Icons  
 - **State Management**: React Hooks  
 - **API Communication**: Axios  
 - **Styling**: Tailwind CSS  
 
-- **Backend**
+### 🔶 Backend
 - **Server**: Node.js, Express.js  
 - **Database**: MySQL with custom triggers  
-- **API**: RESTful architecture  
-- **ORM**: Sequelize / Prisma (inferred)  
+- **API Architecture**: RESTful 
 ---
 
 ## ⚙️ Installation
