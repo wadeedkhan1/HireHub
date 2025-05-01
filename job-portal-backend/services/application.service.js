@@ -30,19 +30,6 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
     
     const job = jobs[0];
     
-    // Check the current number of applications for this job
-    const [applicationCountResult] = await runQuery(
-      "SELECT COUNT(*) as count FROM Applications WHERE job_id = ?",
-      [jobIdNum]
-    );
-    
-    const currentApplicationCount = applicationCountResult.count;
-    
-    // Check if the maximum number of applicants has been reached
-    if (currentApplicationCount >= job.max_applicants) {
-      throw new Error(`Maximum number of applicants reached for this job (${job.max_applicants})`);
-    }
-    
     // Check if already applied
     const existing = await runQuery(
       "SELECT id FROM Applications WHERE user_id = ? AND job_id = ?",
@@ -53,75 +40,26 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
       throw new Error(`You've already applied to this job`);
     }
     
-    // Check if the user exists in JobApplicants
-    const applicantRows = await runQuery(
-      "SELECT user_id FROM JobApplicants WHERE user_id = ?",
-      [userId]
-    );
-    
-    // If the user doesn't exist in JobApplicants, create a default entry
-    if (applicantRows.length === 0) {
-      // Get user info from Users table
-      const userRows = await runQuery(
-        "SELECT email FROM Users WHERE id = ?",
-        [userId]
-      );
-      
-      if (userRows.length === 0) {
-        throw new Error(`User with ID ${userId} not found`);
-      }
-      
-      const email = userRows[0].email;
-      const defaultName = email.split('@')[0];
-      
-      console.log(`Creating default applicant profile for user ${userId}`);
-      
-      // Create a default JobApplicant entry
-      await runQuery(
-        "INSERT INTO JobApplicants (user_id, name, skills) VALUES (?, ?, ?)",
-        [userId, defaultName, ""]
-      );
-    }
-
-    // Insert the application with cover letter if provided
-    console.log(`Inserting application record: user=${userId}, recruiter=${job.recruiter_id}, job=${jobIdNum}`);
-    
-    // Use a single query without the cover_letter field since it doesn't exist in the database
-    let result;
+    // Use the apply_job_transaction stored procedure
     try {
-      // Don't include cover_letter in the query as this column doesn't exist in the schema
-      result = await runQuery(
-        `
-        INSERT INTO Applications (user_id, recruiter_id, job_id, status)
-        VALUES (?, ?, ?, 'applied')
-        `,
-        [userId, job.recruiter_id, jobIdNum]
-      );
+      // Pass coverLetter as sop parameter if available, otherwise null
+      const sop = coverLetter || null;
+      await callProcedure('apply_job_transaction', [userId, jobIdNum, sop]);
       
-      // If a cover letter was provided, we could log it or handle it separately in the future
-      if (coverLetter) {
-        console.log(`Cover letter provided but not stored in database: ${coverLetter.substring(0, 50)}...`);
+      // Create notification for successful application
+      try {
+        const note = `✅ Application submitted for ${job.title}`;
+        await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [userId, note]);
+      } catch (notificationError) {
+        console.warn('Failed to create notification, but application was submitted:', notificationError);
+        // Don't fail the whole process for a notification error
       }
       
-      // Update the active_applications count in the Jobs table
-      await runQuery(
-        "UPDATE Jobs SET active_applications = active_applications + 1 WHERE id = ?",
-        [jobIdNum]
-      );
+      return { success: true, message: 'Application submitted successfully' };
     } catch (dbError) {
-      console.error('Database error during application insertion:', dbError);
+      console.error('Database error during application submission:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
     }
-
-    try {
-      const note = `✅ Application submitted for ${job.title}`;
-      await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [userId, note]);
-    } catch (notificationError) {
-      console.warn('Failed to create notification, but application was submitted:', notificationError);
-      // Don't fail the whole process for a notification error
-    }
-
-    return result;
   } catch (error) {
     console.error("Application service error:", error);
     throw error;
@@ -129,58 +67,32 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
 };
 
 exports.updateStatus = async (applicationId, newStatus) => {
-  // First get the current status and job_id
-  const [currentApp] = await runQuery(
-    "SELECT status, job_id FROM Applications WHERE id = ?",
-    [applicationId]
-  );
-  
-  if (!currentApp) {
-    throw new Error("Application not found");
-  }
-  
-  const oldStatus = currentApp.status;
-  const jobId = currentApp.job_id;
-  
-  // Update the application status
-  await runQuery(
-    "UPDATE Applications SET status = ? WHERE id = ?",
-    [newStatus, applicationId]
-  );
-
-  // Update accepted_candidates count if status changes to or from 'accepted'
-  if (oldStatus !== 'accepted' && newStatus === 'accepted') {
-    // Increment accepted_candidates when status changes TO accepted
-    await runQuery(
-      "UPDATE Jobs SET accepted_candidates = accepted_candidates + 1 WHERE id = ?",
-      [jobId]
+  try {
+    // Call the stored procedure to update application status
+    await callProcedure('update_application_status', [applicationId, newStatus]);
+    
+    // Get application details including job title for the notification
+    const [appRow] = await runQuery(
+      `SELECT a.user_id, j.title AS job_title
+       FROM Applications a
+       JOIN Jobs j ON a.job_id = j.id
+       WHERE a.id = ?`,
+      [applicationId]
     );
-  } else if (oldStatus === 'accepted' && newStatus !== 'accepted') {
-    // Decrement accepted_candidates when status changes FROM accepted
-    await runQuery(
-      "UPDATE Jobs SET accepted_candidates = GREATEST(accepted_candidates - 1, 0) WHERE id = ?",
-      [jobId]
-    );
-  }
+    
+    if (appRow) {
+      const note = `📢 Your application for "${appRow.job_title}" is now "${newStatus}"`;
+      await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [
+        appRow.user_id,
+        note
+      ]);
+    }
 
-  // Get application details including job title
-  const [appRow] = await runQuery(
-    `SELECT a.user_id, j.title AS job_title
-     FROM Applications a
-     JOIN Jobs j ON a.job_id = j.id
-     WHERE a.id = ?`,
-    [applicationId]
-  );
-  
-  if (appRow) {
-    const note = `📢 Your application for "${appRow.job_title}" is now "${newStatus}"`;
-    await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [
-      appRow.user_id,
-      note
-    ]);
+    return { applicationId, newStatus };
+  } catch (error) {
+    console.error(`Error updating application status:`, error.message);
+    throw error;
   }
-
-  return { applicationId, newStatus };
 };
 
 exports.getApplicationsByUser = async (userId) => {

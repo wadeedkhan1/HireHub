@@ -210,3 +210,41 @@ exports.updateProfile = async (userId, userType, profileData) => {
     throw error;
   }
 };
+
+// Create a function to get user dashboard using stored procedure
+exports.getUserDashboard = async (userId) => {
+  try {
+    const results = await callProcedure('get_user_dashboard', [userId]);
+    
+    // The stored procedure returns multiple result sets
+    return {
+      applications: results[0],    // Applications data
+      recentJobs: results[1],      // Recent jobs
+      notifications: results[2]    // User notifications
+    };
+  } catch (error) {
+    console.error('Error getting user dashboard:', error);
+    throw error;
+  }
+};
+
+// Add registerUser function using the transaction procedure
+exports.registerUser = async (userData) => {
+  try {
+    const { email, password, userType, name, contactNumber, bioOrSkills } = userData;
+    
+    await callProcedure('register_user_transaction', [
+      email,
+      password,
+      userType,
+      name,
+      contactNumber,
+      bioOrSkills || '' // Make sure we don't pass undefined
+    ]);
+    
+    return { success: true, message: "User registered successfully" };
+  } catch (error) {
+    console.error('Error registering user:', error);
+    throw error;
+  }
+};

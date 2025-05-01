@@ -34,39 +34,41 @@ exports.searchJobs = async (filters) => {
 };
 
 exports.postJob = async (recruiterId, data) => {
-  const { title, category, location, max_applicants, max_positions, job_type, duration, salary, deadline } = data;
-
-  // First, we need to get the recruiter_id from the Recruiters table using the user_id
-  const recruiters = await runQuery("SELECT id FROM Recruiters WHERE user_id = ?", [recruiterId]);
-  
-  if (!recruiters || recruiters.length === 0) {
-    throw new Error("Recruiter profile not found. Please complete your profile setup first.");
+  try {
+    const { title, category, location, max_applicants, max_positions, job_type, duration, salary, deadline } = data;
+    
+    // Convert skills array to JSON string if provided
+    const skills = data.skills ? JSON.stringify(data.skills) : JSON.stringify([]);
+    
+    // Call the stored procedure to post the job
+    await callProcedure('post_job_transaction', [
+      recruiterId,
+      title,
+      category,
+      location,
+      salary,
+      job_type,
+      skills
+    ]);
+    
+    // Return success message
+    return { 
+      success: true, 
+      message: "Job posted successfully",
+      data: {
+        title,
+        category,
+        location,
+        salary,
+        job_type
+      }
+    };
+  } catch (error) {
+    console.error("Error posting job:", error);
+    throw error;
   }
-  
-  const actualRecruiterId = recruiters[0].id;
-  
-  const query = `
-    INSERT INTO Jobs (recruiter_id, title, category, location, max_applicants, max_positions, job_type, duration, salary, deadline)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  const params = [
-    actualRecruiterId,
-    title,
-    category,
-    location,
-    max_applicants,
-    max_positions,
-    job_type,
-    duration,
-    salary,
-    deadline
-  ];
-
-  const result = await runQuery(query, params);
-
-  return result;
 };
+
 // Optional (based on other controller methods)
 
 exports.getJobsByCategory = async (category) => {

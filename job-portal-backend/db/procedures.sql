@@ -51,10 +51,10 @@ END;
 -- Update application status
 CREATE PROCEDURE update_application_status(
     IN app_id INT,
-    IN new_status ENUM('applied', 'shortlisted', 'accepted', 'rejected', 'cancelled', 'finished')
+    IN new_status ENUM('applied', 'shortlisted', 'accepted', 'rejected')
 )
 BEGIN
-    DECLARE old_status ENUM('applied', 'shortlisted', 'accepted', 'rejected', 'cancelled', 'finished');
+    DECLARE old_status ENUM('applied', 'shortlisted', 'accepted', 'rejected');
 
     SELECT status INTO old_status
     FROM Applications
@@ -70,7 +70,7 @@ BEGIN
         WHERE id = (SELECT job_id FROM Applications WHERE id = app_id);
     END IF;
 
-    IF new_status IN ('cancelled', 'rejected') AND old_status = 'applied' THEN
+    IF new_status IN ('rejected') AND old_status = 'applied' THEN
         UPDATE Jobs
         SET active_applications = active_applications - 1
         WHERE id = (SELECT job_id FROM Applications WHERE id = app_id);
