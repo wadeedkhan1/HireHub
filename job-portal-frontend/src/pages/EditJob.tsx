@@ -18,7 +18,7 @@ const EditJob = () => {
     company: "",
     location: "",
     salary: "",
-    job_type: "Full-Time",
+    job_type: "full-time",
     deadline: "",
     duration: "",
     description: "",
@@ -179,10 +179,10 @@ const EditJob = () => {
                     className="input-field"
                     required
                   >
-                    <option value="Full-Time">Full-Time</option>
-                    <option value="Part-Time">Part-Time</option>
-                    <option value="Contract">Contract</option>
-                    <option value="Internship">Internship</option>
+                    <option value="full-time">Full-Time</option>
+                    <option value="part-time">Part-Time</option>
+                    <option value="internship">Internship</option>
+                    <option value="freelance">Freelance</option>
                   </select>
                 </div>
                 

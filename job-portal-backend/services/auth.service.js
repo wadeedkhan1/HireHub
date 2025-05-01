@@ -1,4 +1,5 @@
 const pool = require("../db/connection");
+const { callProcedure } = require("../db/query");
 
 exports.register = async ({
   email,
@@ -26,28 +27,39 @@ exports.register = async ({
     throw new Error("User with this email already exists");
   }
 
-  // Insert into Users
-  const [userResult] = await pool.execute(
-    "INSERT INTO Users (email, password, type) VALUES (?, ?, ?)",
-    [email, password, user_type]
-  );
-
-  const userId = userResult.insertId;
-
-  // Recruiter or Applicant branch
-  if (user_type === "recruiter") {
-    await pool.execute(
-      "INSERT INTO Recruiters (user_id, name, contact_number, bio) VALUES (?, ?, ?, ?)",
-      [userId, name, contact_number ?? null, bio_or_skills ?? null]
-    );
-  } else if (user_type === "applicant") {
-    await pool.execute(
-      "INSERT INTO JobApplicants (user_id, name, skills, resume, profile) VALUES (?, ?, ?, ?, ?)",
-      [userId, name, bio_or_skills ?? null, resume ?? null, profile ?? null]
-    );
+  try {
+    // Call the transaction procedure for user registration
+    await callProcedure('register_user_transaction', [
+      email,
+      password,
+      user_type,
+      name,
+      contact_number || '',
+      bio_or_skills || ''
+    ]);
+    
+    // Get the user ID of the newly registered user
+    const [userResult] = await pool.execute("SELECT id FROM Users WHERE email = ?", [email]);
+    
+    if (!userResult.length) {
+      throw new Error("User registration failed");
+    }
+    
+    const userId = userResult[0].id;
+    
+    // Handle additional fields for applicants if needed
+    if (user_type === 'applicant' && (resume || profile)) {
+      await pool.execute(
+        "UPDATE JobApplicants SET resume = ?, profile = ? WHERE user_id = ?",
+        [resume || null, profile || null, userId]
+      );
+    }
+    
+    return userId;
+  } catch (error) {
+    console.error("Error in register transaction:", error);
+    throw error;
   }
-
-  return userId;
 };
 
 exports.login = async ({ email, password }) => {

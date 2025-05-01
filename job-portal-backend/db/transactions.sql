@@ -59,18 +59,32 @@ BEGIN
 END;
 //
 
--- Apply for a job
+DELIMITER //
+
+DROP PROCEDURE IF EXISTS apply_job_transaction;
+//
+
 CREATE PROCEDURE apply_job_transaction(
     IN applicant_id INT,
     IN job_id INT,
     IN sop TEXT
 )
 BEGIN
+    DECLARE rec_id INT;
+
+    -- Get the recruiter_id from the Jobs table
+    SELECT recruiter_id INTO rec_id
+    FROM Jobs
+    WHERE id = job_id
+    LIMIT 1;
+
     START TRANSACTION;
 
-    INSERT INTO Applications (user_id, job_id, status, date_of_application)
-    VALUES (applicant_id, job_id, 'applied', NOW());
+    -- Insert application with recruiter_id
+    INSERT INTO Applications (user_id, job_id, recruiter_id, status, date_of_application)
+    VALUES (applicant_id, job_id, rec_id, 'applied', NOW());
 
+    -- Update active applications count
     UPDATE Jobs
     SET active_applications = active_applications + 1
     WHERE id = job_id;

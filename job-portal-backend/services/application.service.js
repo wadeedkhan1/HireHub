@@ -40,11 +40,47 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
       throw new Error(`You've already applied to this job`);
     }
     
-    // Use the apply_job_transaction stored procedure
+    // Get the recruiter ID from the Jobs table
+    const recruiterId = job.recruiter_id;
+    
+    if (!recruiterId) {
+      throw new Error('Recruiter information not found for this job');
+    }
+    
     try {
-      // Pass coverLetter as sop parameter if available, otherwise null
-      const sop = coverLetter || null;
-      await callProcedure('apply_job_transaction', [userId, jobIdNum, sop]);
+      // Try to call the stored procedure with recruiter_id
+      try {
+        // First attempt: with the recruiter_id passed separately from the frontend
+        await runQuery(
+          `INSERT INTO Applications (user_id, job_id, recruiter_id, status, date_of_application)
+           VALUES (?, ?, ?, 'applied', NOW())`,
+          [userId, jobIdNum, recruiterId]
+        );
+      } catch (insertError) {
+        console.error('Error inserting application directly:', insertError);
+        
+        // If direct insert failed, try the stored procedure
+        try {
+          await callProcedure('apply_job_transaction', [
+            userId, 
+            jobIdNum, 
+            coverLetter || ''
+          ]);
+        } catch (procError) {
+          console.error('Error calling apply_job_transaction procedure:', procError);
+          throw procError;
+        }
+      }
+      
+      // Update active applications count (in case the procedure didn't do it)
+      try {
+        await runQuery(
+          "UPDATE Jobs SET active_applications = active_applications + 1 WHERE id = ?",
+          [jobIdNum]
+        );
+      } catch (updateError) {
+        console.warn('Could not update active_applications count:', updateError);
+      }
       
       // Create notification for successful application
       try {
@@ -52,12 +88,11 @@ exports.applyForJob = async (userId, jobId, coverLetter = null) => {
         await runQuery("INSERT INTO Notifications (user_id, message) VALUES (?, ?)", [userId, note]);
       } catch (notificationError) {
         console.warn('Failed to create notification, but application was submitted:', notificationError);
-        // Don't fail the whole process for a notification error
       }
       
       return { success: true, message: 'Application submitted successfully' };
     } catch (dbError) {
-      console.error('Database error during application submission:', dbError);
+      console.error('Error in application process:', dbError);
       throw new Error(`Database error: ${dbError.message}`);
     }
   } catch (error) {

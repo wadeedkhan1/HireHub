@@ -173,8 +173,8 @@ const JobFilters = ({ onFilterChange, initialFilters }: JobFiltersProps) => {
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={jobType.includes("Full-Time")}
-                    onChange={() => toggleJobType("Full-Time")}
+                    checked={jobType.includes("full-time")}
+                    onChange={() => toggleJobType("full-time")}
                     className="rounded text-blue-500 focus:ring-blue-400"
                   />
                   <span className="text-sm">Full-Time</span>
@@ -183,8 +183,8 @@ const JobFilters = ({ onFilterChange, initialFilters }: JobFiltersProps) => {
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={jobType.includes("Part-Time")}
-                    onChange={() => toggleJobType("Part-Time")}
+                    checked={jobType.includes("part-time")}
+                    onChange={() => toggleJobType("part-time")}
                     className="rounded text-blue-500 focus:ring-blue-400"
                   />
                   <span className="text-sm">Part-Time</span>
@@ -193,18 +193,18 @@ const JobFilters = ({ onFilterChange, initialFilters }: JobFiltersProps) => {
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={jobType.includes("Contract")}
-                    onChange={() => toggleJobType("Contract")}
+                    checked={jobType.includes("freelance")}
+                    onChange={() => toggleJobType("freelance")}
                     className="rounded text-blue-500 focus:ring-blue-400"
                   />
-                  <span className="text-sm">Contract</span>
+                  <span className="text-sm">Freelance</span>
                 </label>
                 
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={jobType.includes("Internship")}
-                    onChange={() => toggleJobType("Internship")}
+                    checked={jobType.includes("internship")}
+                    onChange={() => toggleJobType("internship")}
                     className="rounded text-blue-500 focus:ring-blue-400"
                   />
                   <span className="text-sm">Internship</span>
