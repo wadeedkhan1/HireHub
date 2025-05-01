@@ -64,26 +64,6 @@ Create `.env` files in `backend` directory with appropriate environment variable
 
 ---
 
-## 📁 Project Structure
-
-HireHub/
-├── job-portal-frontend/     # React frontend application
-│   ├── public/              # Static files
-│   └── src/
-│       ├── components/      # Reusable UI components
-│       ├── pages/           # Application pages
-│       ├── services/        # API service integration
-│       ├── utils/           # Utility functions
-│       └── ...
-├── job-portal-backend/      # Backend API server
-│   ├── controllers/         # Request handlers
-│   ├── models/              # Database models
-│   ├── routes/              # API routes
-│   └── ...
-└── README.md                # This file
-
----
-
 ## 📡 API Endpoints
 
 The application uses a RESTful API with the following primary endpoints:
